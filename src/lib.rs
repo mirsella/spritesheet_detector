@@ -33,6 +33,7 @@ pub struct SpritesheetInfo {
 /// - Otherwise, it uses the pixel at `(0, 0)` as the margin/padding color to detect boundaries.
 /// - A cell is counted as a valid frame if any pixel inside it is not equal to the margin color.
 pub fn analyze_spritesheet(img: &DynamicImage, gap_threshold: Option<u32>) -> SpritesheetInfo {
+    let gap_threshold = gap_threshold.unwrap_or(40);
     let (width, height) = img.dimensions();
 
     // Shortcut: if width is evenly divisible by height,
@@ -74,7 +75,6 @@ pub fn analyze_spritesheet(img: &DynamicImage, gap_threshold: Option<u32>) -> Sp
     }
 
     // A gap must be at least a certain amount of pixels to be considered a valid cell boundary.
-    let gap_threshold = gap_threshold.unwrap_or(40);
     let columns = std::cmp::max(
         vertical_boundaries
             .windows(2)
