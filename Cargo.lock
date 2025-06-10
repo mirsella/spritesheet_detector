@@ -766,6 +766,7 @@ name = "spritesheet_detector"
 version = "0.1.0"
 dependencies = [
  "image",
+ "serde",
 ]
 
 [[package]]

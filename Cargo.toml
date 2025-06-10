@@ -10,3 +10,7 @@ license = "MIT"
 
 [dependencies]
 image = "0.25"
+serde = { version = "1", features = ["derive"], optional = true }
+
+[features]
+serde = ["dep:serde"]
