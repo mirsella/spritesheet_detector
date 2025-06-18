@@ -20,8 +20,8 @@ pub struct SpritesheetInfo {
 ///
 /// # Arguments
 ///
-/// * `img` - A reference to a DynamicImage representing the spritesheet.
-/// * `gap_threshold` - Optional threshold for gaps between sprites. Defaults to 40.
+/// * `img` - A reference to a `DynamicImage` representing the spritesheet.
+/// * `gap_threshold` - Threshold for gaps between sprites.
 ///
 /// # Returns
 ///
@@ -33,8 +33,8 @@ pub struct SpritesheetInfo {
 /// - If the image width is evenly divisible by its height, the sprites are square frames.
 /// - Otherwise, it uses the pixel at `(0, 0)` as the margin/padding color to detect boundaries.
 /// - A cell is counted as a valid frame if any pixel inside it is not equal to the margin color.
-pub fn analyze_spritesheet(img: &DynamicImage, gap_threshold: Option<u32>) -> SpritesheetInfo {
-    let gap_threshold = gap_threshold.unwrap_or(40);
+#[must_use]
+pub fn analyze_spritesheet(img: &DynamicImage, gap_threshold: u32) -> SpritesheetInfo {
     let (width, height) = img.dimensions();
 
     // Shortcut: if width is evenly divisible by height,
@@ -76,6 +76,7 @@ pub fn analyze_spritesheet(img: &DynamicImage, gap_threshold: Option<u32>) -> Sp
     }
 
     // A gap must be at least a certain amount of pixels to be considered a valid cell boundary.
+    #[allow(clippy::cast_possible_truncation)]
     let columns = std::cmp::max(
         vertical_boundaries
             .windows(2)
@@ -83,6 +84,7 @@ pub fn analyze_spritesheet(img: &DynamicImage, gap_threshold: Option<u32>) -> Sp
             .count(),
         1,
     ) as u32;
+    #[allow(clippy::cast_possible_truncation)]
     let rows = std::cmp::max(
         horizontal_boundaries
             .windows(2)
@@ -96,6 +98,7 @@ pub fn analyze_spritesheet(img: &DynamicImage, gap_threshold: Option<u32>) -> Sp
     let sprite_height = height / rows;
 
     // Count valid frames: a cell is valid if any pixel in it is not the margin color.
+    #[allow(clippy::cast_possible_truncation)]
     let frame_count = (0..rows)
         .flat_map(|row_idx| {
             (0..columns).filter(move |&col_idx| {
@@ -132,7 +135,7 @@ mod tests {
             *pixel = image::Rgba([255, 255, 255, 255]);
         }
         let dyn_img = DynamicImage::ImageRgba8(img);
-        let info = analyze_spritesheet(&dyn_img, None);
+        let info = analyze_spritesheet(&dyn_img, 40);
         assert_eq!(info.sprite_width, 50);
         assert_eq!(info.sprite_height, 50);
         assert_eq!(info.columns, 4);
@@ -142,7 +145,7 @@ mod tests {
     #[test]
     fn test_asset_example() {
         let img = image::open("assets/example.png").unwrap();
-        let info = analyze_spritesheet(&img, None);
+        let info = analyze_spritesheet(&img, 40);
         assert_eq!(info.sprite_width, 193);
         assert_eq!(info.sprite_height, 155);
         assert_eq!(info.columns, 5);
