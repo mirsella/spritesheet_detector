@@ -1,6 +1,6 @@
 [package]
 name = "spritesheet_detector"
-version = "0.1.1"
+version = "0.2.0"
 authors = ["mirsella <mirsella@protonmail.com>"]
 edition = "2024"
 description = "A library to analyze spritesheets and detect sprite dimensions and frame count."
