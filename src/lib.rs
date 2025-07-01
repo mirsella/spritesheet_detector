@@ -2,7 +2,7 @@ use image::{DynamicImage, GenericImageView};
 
 /// Information about the spritesheet.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct SpritesheetInfo {
     /// The width of a single sprite frame.
     pub sprite_width: u32,
@@ -39,7 +39,7 @@ pub fn analyze_spritesheet(img: &DynamicImage, gap_threshold: u32) -> Spriteshee
 
     // Shortcut: if width is evenly divisible by height,
     // assume single row square frames.
-    if width % height == 0 && width != height {
+    if width.is_multiple_of(height) && width != height {
         let frames = width / height;
         return SpritesheetInfo {
             sprite_width: height,
