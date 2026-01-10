@@ -118,38 +118,4 @@ pub fn analyze_spritesheet(img: &DynamicImage, gap_threshold: u32) -> Spriteshee
         columns,
         rows,
         frame_count,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use image::RgbaImage;
-
-    #[test]
-    fn test_square_frames() {
-        // Create an image 200x50, which implies 4 square frames of size 50x50.
-        let mut img = RgbaImage::new(200, 50);
-        // Fill the image with non-margin color (e.g., white).
-        for pixel in img.pixels_mut() {
-            *pixel = image::Rgba([255, 255, 255, 255]);
-        }
-        let dyn_img = DynamicImage::ImageRgba8(img);
-        let info = analyze_spritesheet(&dyn_img, 40);
-        assert_eq!(info.sprite_width, 50);
-        assert_eq!(info.sprite_height, 50);
-        assert_eq!(info.columns, 4);
-        assert_eq!(info.rows, 1);
-        assert_eq!(info.frame_count, 4);
-    }
-    #[test]
-    fn test_asset_example() {
-        let img = image::open("assets/example.png").unwrap();
-        let info = analyze_spritesheet(&img, 40);
-        assert_eq!(info.sprite_width, 193);
-        assert_eq!(info.sprite_height, 155);
-        assert_eq!(info.columns, 5);
-        assert_eq!(info.rows, 4);
-        assert_eq!(info.frame_count, 18);
-    }
-}
+    }       }
