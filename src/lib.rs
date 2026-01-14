@@ -25,7 +25,7 @@ pub struct SpritesheetInfo {
 /// 3. Harmonic consensus and VoV validation to suppress sub-harmonics.
 /// 4. Adaptive clustering for robust frame counting via Shannon Entropy.
 #[must_use]
-pub fn analyze_spritesheet(img: &DynamicImage, _gap_threshold: u32) -> SpritesheetInfo {
+pub fn analyze_spritesheet(img: &DynamicImage, _: u32) -> SpritesheetInfo {
     let (width, height) = img.dimensions();
 
     // 1. Feature Extraction: Projection Profiles (Alpha + Gradient)
@@ -188,7 +188,15 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
     }
     // Sort by score descending
     scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
     let max_s = scored[0].1;
+
+    // Sanity check: If the best score is too low, assume no grid (single frame).
+    // A score below 1.2 implies weak correlation and low structure variance.
+    // Real grids usually score > 3.0. Small 2-col grids might score ~1.5-2.0.
+    if max_s < 1.2 {
+        return total_dim;
+    }
 
     // Tie-breaker: Prefer the smallest period that is "strong enough".
     // We look for the smallest 'f' that has at least 85% of the top score.
@@ -283,7 +291,11 @@ fn calculate_vov(sig: &[f32], p: usize) -> f32 {
     }
 
     // Penalize very low column count
-    let mut reliability = if c == 2 { 0.5 } else { 1.0 };
+    let mut reliability = if c == 2 {
+        if n < 600 { 0.8 } else { 0.5 }
+    } else {
+        1.0
+    };
 
     // For large images (>800), c=2 is almost always wrong (half-sheet split).
     if c == 2 && n > 800 {
