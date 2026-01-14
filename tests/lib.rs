@@ -3,10 +3,7 @@ use spritesheet_detector::{SpritesheetInfo, analyze_spritesheet};
 #[test]
 fn test_regression_archer_card_icon() {
     assert_eq!(
-        analyze_spritesheet(
-            &image::open("assets/regression_archer_card_icon.png").unwrap(),
-            40
-        ),
+        analyze_spritesheet(&image::open("assets/regression_archer_card_icon.png").unwrap(),),
         SpritesheetInfo {
             sprite_width: 500,
             sprite_height: 500,
@@ -20,10 +17,7 @@ fn test_regression_archer_card_icon() {
 #[test]
 fn test_regression_castle_card_human() {
     assert_eq!(
-        analyze_spritesheet(
-            &image::open("assets/regression_castle_card_human.png").unwrap(),
-            40
-        ),
+        analyze_spritesheet(&image::open("assets/regression_castle_card_human.png").unwrap(),),
         SpritesheetInfo {
             sprite_width: 220,
             sprite_height: 388,
@@ -37,10 +31,7 @@ fn test_regression_castle_card_human() {
 #[test]
 fn test_regression_bomb_card_projectile() {
     assert_eq!(
-        analyze_spritesheet(
-            &image::open("assets/regression_bomb_card_projectile.png").unwrap(),
-            40
-        ),
+        analyze_spritesheet(&image::open("assets/regression_bomb_card_projectile.png").unwrap(),),
         SpritesheetInfo {
             sprite_width: 293,
             sprite_height: 252,
@@ -54,7 +45,7 @@ fn test_regression_bomb_card_projectile() {
 #[test]
 fn test_asset_example() {
     assert_eq!(
-        analyze_spritesheet(&image::open("assets/example.png").unwrap(), 40),
+        analyze_spritesheet(&image::open("assets/example.png").unwrap()),
         SpritesheetInfo {
             sprite_width: 193,
             sprite_height: 155,
@@ -68,7 +59,7 @@ fn test_asset_example() {
 #[test]
 fn test_map_tiles() {
     assert_eq!(
-        analyze_spritesheet(&image::open("assets/map_tiles.png").unwrap(), 40),
+        analyze_spritesheet(&image::open("assets/map_tiles.png").unwrap()),
         SpritesheetInfo {
             sprite_width: 200,
             sprite_height: 168,
@@ -83,7 +74,7 @@ fn test_map_tiles() {
 #[ignore = "too complicated for now"]
 fn test_map_overlays() {
     assert_eq!(
-        analyze_spritesheet(&image::open("assets/map_overlays.png").unwrap(), 40),
+        analyze_spritesheet(&image::open("assets/map_overlays.png").unwrap()),
         SpritesheetInfo {
             sprite_width: 200,
             sprite_height: 168,
@@ -97,7 +88,7 @@ fn test_map_overlays() {
 #[test]
 fn test_map_tiles_borders() {
     assert_eq!(
-        analyze_spritesheet(&image::open("assets/map_tiles_borders.png").unwrap(), 40),
+        analyze_spritesheet(&image::open("assets/map_tiles_borders.png").unwrap()),
         SpritesheetInfo {
             sprite_width: 400,
             sprite_height: 336,
@@ -111,7 +102,7 @@ fn test_map_tiles_borders() {
 #[test]
 fn test_bomb_card_area() {
     assert_eq!(
-        analyze_spritesheet(&image::open("assets/bomb_card_area.png").unwrap(), 40),
+        analyze_spritesheet(&image::open("assets/bomb_card_area.png").unwrap()),
         SpritesheetInfo {
             sprite_width: 449,
             sprite_height: 318,
@@ -125,10 +116,7 @@ fn test_bomb_card_area() {
 #[test]
 fn test_lightning_mage_card_overlay() {
     assert_eq!(
-        analyze_spritesheet(
-            &image::open("assets/lightning_mage_card_overlay.png").unwrap(),
-            40
-        ),
+        analyze_spritesheet(&image::open("assets/lightning_mage_card_overlay.png").unwrap(),),
         SpritesheetInfo {
             sprite_width: 266,
             sprite_height: 327,
@@ -144,7 +132,6 @@ fn test_cannon_card_projectile_impact_small() {
     assert_eq!(
         analyze_spritesheet(
             &image::open("assets/cannon_card_projectile_impact_small.png").unwrap(),
-            40
         ),
         SpritesheetInfo {
             sprite_width: 101,
@@ -159,10 +146,7 @@ fn test_cannon_card_projectile_impact_small() {
 #[test]
 fn test_ghoul_ripper_troop_hit() {
     assert_eq!(
-        analyze_spritesheet(
-            &image::open("assets/ghoul_ripper_troop_hit.png").unwrap(),
-            40
-        ),
+        analyze_spritesheet(&image::open("assets/ghoul_ripper_troop_hit.png").unwrap(),),
         SpritesheetInfo {
             sprite_width: 136,
             sprite_height: 122,
@@ -176,10 +160,7 @@ fn test_ghoul_ripper_troop_hit() {
 #[test]
 fn test_totem_tower_totem_troop_vfx() {
     assert_eq!(
-        analyze_spritesheet(
-            &image::open("assets/totem_tower_totem_troop_vfx.png").unwrap(),
-            40
-        ),
+        analyze_spritesheet(&image::open("assets/totem_tower_totem_troop_vfx.png").unwrap(),),
         SpritesheetInfo {
             sprite_width: 128,
             sprite_height: 84,
@@ -195,7 +176,6 @@ fn test_totem_tower_troop_projectile_impact() {
     assert_eq!(
         analyze_spritesheet(
             &image::open("assets/totem_tower_troop_projectile_impact.png").unwrap(),
-            40
         ),
         SpritesheetInfo {
             sprite_width: 97,
@@ -210,10 +190,7 @@ fn test_totem_tower_troop_projectile_impact() {
 #[test]
 fn test_totem_tower_totem_troop_active() {
     assert_eq!(
-        analyze_spritesheet(
-            &image::open("assets/totem_tower_totem_troop_active.png").unwrap(),
-            40
-        ),
+        analyze_spritesheet(&image::open("assets/totem_tower_totem_troop_active.png").unwrap(),),
         SpritesheetInfo {
             sprite_width: 96,
             sprite_height: 188,
@@ -227,10 +204,7 @@ fn test_totem_tower_totem_troop_active() {
 #[test]
 fn test_totem_tower_totem_troop_spawn() {
     assert_eq!(
-        analyze_spritesheet(
-            &image::open("assets/totem_tower_totem_troop_spawn.png").unwrap(),
-            40
-        ),
+        analyze_spritesheet(&image::open("assets/totem_tower_totem_troop_spawn.png").unwrap(),),
         SpritesheetInfo {
             sprite_width: 96,
             sprite_height: 188,
@@ -244,10 +218,7 @@ fn test_totem_tower_totem_troop_spawn() {
 #[test]
 fn test_totem_tower_totem_troop_death() {
     assert_eq!(
-        analyze_spritesheet(
-            &image::open("assets/totem_tower_totem_troop_death.png").unwrap(),
-            40
-        ),
+        analyze_spritesheet(&image::open("assets/totem_tower_totem_troop_death.png").unwrap(),),
         SpritesheetInfo {
             sprite_width: 96,
             sprite_height: 188,
@@ -261,10 +232,7 @@ fn test_totem_tower_totem_troop_death() {
 #[test]
 fn test_building_construction() {
     assert_eq!(
-        analyze_spritesheet(
-            &image::open("assets/building_construction.png").unwrap(),
-            40
-        ),
+        analyze_spritesheet(&image::open("assets/building_construction.png").unwrap(),),
         SpritesheetInfo {
             sprite_width: 248,
             sprite_height: 322,
@@ -278,10 +246,7 @@ fn test_building_construction() {
 #[test]
 fn test_building_deconstruction() {
     assert_eq!(
-        analyze_spritesheet(
-            &image::open("assets/building_deconstruction.png").unwrap(),
-            40
-        ),
+        analyze_spritesheet(&image::open("assets/building_deconstruction.png").unwrap(),),
         SpritesheetInfo {
             sprite_width: 248,
             sprite_height: 322,
@@ -295,7 +260,7 @@ fn test_building_deconstruction() {
 #[test]
 fn test_building_destruction() {
     assert_eq!(
-        analyze_spritesheet(&image::open("assets/building_destruction.png").unwrap(), 40),
+        analyze_spritesheet(&image::open("assets/building_destruction.png").unwrap()),
         SpritesheetInfo {
             sprite_width: 340,
             sprite_height: 322,
@@ -309,7 +274,7 @@ fn test_building_destruction() {
 #[test]
 fn test_peasant_card_overlay() {
     assert_eq!(
-        analyze_spritesheet(&image::open("assets/peasant_card_overlay.png").unwrap(), 40),
+        analyze_spritesheet(&image::open("assets/peasant_card_overlay.png").unwrap()),
         SpritesheetInfo {
             sprite_width: 383,
             sprite_height: 392,
@@ -323,10 +288,7 @@ fn test_peasant_card_overlay() {
 #[test]
 fn test_necromancer_troop_projectile() {
     assert_eq!(
-        analyze_spritesheet(
-            &image::open("assets/necromancer_troop_projectile.png").unwrap(),
-            40
-        ),
+        analyze_spritesheet(&image::open("assets/necromancer_troop_projectile.png").unwrap(),),
         SpritesheetInfo {
             sprite_width: 77,
             sprite_height: 49,
@@ -342,7 +304,6 @@ fn test_necromancer_troop_projectile_impact() {
     assert_eq!(
         analyze_spritesheet(
             &image::open("assets/necromancer_troop_projectile_impact.png").unwrap(),
-            40
         ),
         SpritesheetInfo {
             sprite_width: 82,
@@ -357,10 +318,7 @@ fn test_necromancer_troop_projectile_impact() {
 #[test]
 fn test_bomber_troop_projectile() {
     assert_eq!(
-        analyze_spritesheet(
-            &image::open("assets/bomber_troop_projectile.png").unwrap(),
-            40
-        ),
+        analyze_spritesheet(&image::open("assets/bomber_troop_projectile.png").unwrap(),),
         SpritesheetInfo {
             sprite_width: 73,
             sprite_height: 71,
@@ -374,10 +332,7 @@ fn test_bomber_troop_projectile() {
 #[test]
 fn test_monk_tower_troop_rock_attack() {
     assert_eq!(
-        analyze_spritesheet(
-            &image::open("assets/monk_tower_troop_rock_attack.png").unwrap(),
-            40
-        ),
+        analyze_spritesheet(&image::open("assets/monk_tower_troop_rock_attack.png").unwrap(),),
         SpritesheetInfo {
             sprite_width: 238,
             sprite_height: 706,
@@ -391,7 +346,7 @@ fn test_monk_tower_troop_rock_attack() {
 #[test]
 fn test_chest_notif() {
     assert_eq!(
-        analyze_spritesheet(&image::open("assets/chest_notif.png").unwrap(), 40),
+        analyze_spritesheet(&image::open("assets/chest_notif.png").unwrap()),
         SpritesheetInfo {
             sprite_width: 99,
             sprite_height: 117,
@@ -405,10 +360,7 @@ fn test_chest_notif() {
 #[test]
 fn test_archer_troop_blue_projectile() {
     assert_eq!(
-        analyze_spritesheet(
-            &image::open("assets/archer_troop_blue_projectile.png").unwrap(),
-            40
-        ),
+        analyze_spritesheet(&image::open("assets/archer_troop_blue_projectile.png").unwrap(),),
         SpritesheetInfo {
             sprite_width: 106,
             sprite_height: 15,
@@ -422,10 +374,7 @@ fn test_archer_troop_blue_projectile() {
 #[test]
 fn test_mask_troop_projectile() {
     assert_eq!(
-        analyze_spritesheet(
-            &image::open("assets/mask_troop_projectile.png").unwrap(),
-            40
-        ),
+        analyze_spritesheet(&image::open("assets/mask_troop_projectile.png").unwrap(),),
         SpritesheetInfo {
             sprite_width: 108,
             sprite_height: 62,
@@ -440,10 +389,7 @@ fn test_mask_troop_projectile() {
 #[ignore]
 fn test_ghoul_ripper_card_blue_peek() {
     assert_eq!(
-        analyze_spritesheet(
-            &image::open("assets/ghoul_ripper_card_blue_peek.png").unwrap(),
-            40
-        ),
+        analyze_spritesheet(&image::open("assets/ghoul_ripper_card_blue_peek.png").unwrap(),),
         SpritesheetInfo {
             sprite_width: 320,
             sprite_height: 320,
@@ -458,10 +404,7 @@ fn test_ghoul_ripper_card_blue_peek() {
 #[ignore]
 fn test_ghoul_ripper_troop_blue_spawn() {
     assert_eq!(
-        analyze_spritesheet(
-            &image::open("assets/ghoul_ripper_troop_blue_spawn.png").unwrap(),
-            40
-        ),
+        analyze_spritesheet(&image::open("assets/ghoul_ripper_troop_blue_spawn.png").unwrap(),),
         SpritesheetInfo {
             sprite_width: 280,
             sprite_height: 224,
@@ -475,10 +418,7 @@ fn test_ghoul_ripper_troop_blue_spawn() {
 #[test]
 fn test_hero_builder_troop_blue_attack() {
     assert_eq!(
-        analyze_spritesheet(
-            &image::open("assets/hero_builder_troop_blue_attack.png").unwrap(),
-            40
-        ),
+        analyze_spritesheet(&image::open("assets/hero_builder_troop_blue_attack.png").unwrap(),),
         SpritesheetInfo {
             sprite_width: 100,
             sprite_height: 64,
@@ -495,7 +435,6 @@ fn test_punk_band_guitarrist_troop_blue_death() {
     assert_eq!(
         analyze_spritesheet(
             &image::open("assets/punk_band_guitarrist_troop_blue_death.png").unwrap(),
-            40
         ),
         SpritesheetInfo {
             sprite_width: 340,
@@ -510,7 +449,7 @@ fn test_punk_band_guitarrist_troop_blue_death() {
 #[test]
 fn test_ui_chest_lock() {
     assert_eq!(
-        analyze_spritesheet(&image::open("assets/UI_chest_lock.png").unwrap(), 40),
+        analyze_spritesheet(&image::open("assets/UI_chest_lock.png").unwrap()),
         SpritesheetInfo {
             sprite_width: 130,
             sprite_height: 130,
@@ -524,7 +463,7 @@ fn test_ui_chest_lock() {
 #[test]
 fn test_card_glow() {
     assert_eq!(
-        analyze_spritesheet(&image::open("assets/card_glow.png").unwrap(), 40),
+        analyze_spritesheet(&image::open("assets/card_glow.png").unwrap()),
         SpritesheetInfo {
             sprite_width: 438,
             sprite_height: 514,
@@ -538,7 +477,7 @@ fn test_card_glow() {
 #[test]
 fn test_blue_cross() {
     assert_eq!(
-        analyze_spritesheet(&image::open("assets/blue_cross.png").unwrap(), 40),
+        analyze_spritesheet(&image::open("assets/blue_cross.png").unwrap()),
         SpritesheetInfo {
             sprite_width: 200,
             sprite_height: 200,

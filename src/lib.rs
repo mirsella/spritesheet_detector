@@ -19,7 +19,7 @@ pub struct SpritesheetInfo {
 
 /// Analyze a spritesheet image and return its grid information.
 #[must_use]
-pub fn analyze_spritesheet(img: &DynamicImage, _: u32) -> SpritesheetInfo {
+pub fn analyze_spritesheet(img: &DynamicImage) -> SpritesheetInfo {
     let (width, height) = img.dimensions();
 
     // 1. Feature Extraction: Projection Profiles (Alpha + Gradient)
