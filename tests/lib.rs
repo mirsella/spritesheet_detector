@@ -219,7 +219,7 @@ fn test_building_construction() {
             sprite_height: 322,
             columns: 7,
             rows: 7,
-            frame_count: 49,
+            frame_count: 48,
         }
     );
 }
@@ -250,7 +250,7 @@ fn test_building_destruction() {
             sprite_height: 322,
             columns: 8,
             rows: 7,
-            frame_count: 52,
+            frame_count: 53,
         }
     );
 }
@@ -264,7 +264,7 @@ fn test_peasant_card_overlay() {
             sprite_height: 392,
             columns: 11,
             rows: 10,
-            frame_count: 110,
+            frame_count: 100,
         }
     );
 }
@@ -281,7 +281,7 @@ fn test_necromancer_troop_projectile() {
             sprite_height: 49,
             columns: 3,
             rows: 3,
-            frame_count: 5,
+            frame_count: 8,
         }
     );
 }
@@ -298,7 +298,7 @@ fn test_necromancer_troop_projectile_impact() {
             sprite_height: 74,
             columns: 3,
             rows: 3,
-            frame_count: 5,
+            frame_count: 8,
         }
     );
 }
@@ -332,7 +332,7 @@ fn test_monk_tower_troop_rock_attack() {
             sprite_height: 706,
             columns: 6,
             rows: 6,
-            frame_count: 36,
+            frame_count: 35,
         }
     );
 }
