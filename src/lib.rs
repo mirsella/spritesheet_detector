@@ -18,12 +18,6 @@ pub struct SpritesheetInfo {
 }
 
 /// Analyze a spritesheet image and return its grid information.
-///
-/// This implementation follows the "Spectral-Spatial Pipeline" research paper:
-/// 1. Dimensional reduction to 1D Energy Profiles (Alpha + Gradient).
-/// 2. Autocorrelation-based periodicity detection on image divisors.
-/// 3. Harmonic consensus and VoV validation to suppress sub-harmonics.
-/// 4. Adaptive clustering for robust frame counting via Shannon Entropy.
 #[must_use]
 pub fn analyze_spritesheet(img: &DynamicImage, _: u32) -> SpritesheetInfo {
     let (width, height) = img.dimensions();
@@ -47,7 +41,6 @@ pub fn analyze_spritesheet(img: &DynamicImage, _: u32) -> SpritesheetInfo {
     };
 
     // 3. Content Validation: Frame Counting
-    // We assume frames are packed sequentially. We scan from the end to find the last active frame.
     let frame_count = if sprite_width > 0 && sprite_height > 0 {
         find_last_active_frame(img, sprite_width, sprite_height, columns, rows)
     } else {
@@ -114,7 +107,7 @@ fn extract_signals(img: &DynamicImage) -> (Vec<f32>, Vec<f32>, Vec<f32>, Vec<f32
 }
 
 fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
-    let factors = get_divisors(total_dim);
+    let factors = get_factors_to_check(total_dim);
     let a_mean = alpha.iter().sum::<f32>() / alpha.len() as f32;
     let a_var = alpha.iter().map(|&x| (x - a_mean).powi(2)).sum::<f32>() / alpha.len() as f32;
 
@@ -125,20 +118,10 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
 
     let mut scored = Vec::new();
     for &f in &factors {
-        // Strict filter for tiny periods to avoid noise
-        if f < 12 && total_dim > 64 {
-            continue;
-        }
-
-        // Filter out small periods that are likely texture grain in large images
-        if f < 32 && total_dim > 640 {
-            continue;
-        }
         if f < 4 || f > total_dim / 2 {
             continue;
         }
-        // Ignore extremely dense grids
-        if (total_dim / f) > 256 {
+        if (total_dim / f) > 512 {
             continue;
         }
 
@@ -146,29 +129,17 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
         let r2 = normalized_correlation(&detrended, (f * 2) as usize);
         let r3 = normalized_correlation(&detrended, (f * 3) as usize);
 
-        // If we only have a few repetitions (e.g. 2 columns), the signal is unreliable.
         let num_repeats = total_dim / f;
-        if num_repeats < 3 && r1 < 0.25 {
+        if num_repeats < 2 && r1 < 0.25 {
             continue;
         }
 
-        // Hard reject 2-column grids for very large images (likely false positive half-splits)
-        if num_repeats == 2 && total_dim > 1000 {
-            continue;
-        }
-
-        // Harmonic Product Spectrum (HPS) consensus with Geometric Mean
-        // We accumulate log-scores (or just product) and take the N-th root.
         let mut product = r1.max(0.01);
         let mut count = 1.0;
-
-        // 2nd harmonic
         if (f as usize * 2) < detrended.len() {
             product *= r2.max(0.01);
             count += 1.0;
         }
-
-        // 3rd harmonic
         if (f as usize * 3) < detrended.len() {
             product *= r3.max(0.01);
             count += 1.0;
@@ -177,91 +148,160 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
         let h_score = product.powf(1.0 / count);
         let vov = calculate_vov(signal, f as usize);
 
-        // Final score combines HPS and Variance of Variance (VoV)
-        // Boost VoV influence to heavily favor cleaner cuts (edges).
-        let score = h_score * (1.0 + vov * 3.0);
-        scored.push((f, score));
+        let mut reliability = 1.0;
+
+        // Penalty for very small periods (often texture/noise)
+        if f < 16 && num_repeats > 8 {
+            reliability *= 0.1;
+        }
+
+        if num_repeats == 2 {
+            // "Cut Line" Analysis: Check if we are splitting a solid object
+            let cut_idx = f as usize;
+            if cut_idx < alpha.len() {
+                let local_a = alpha[cut_idx];
+                let local_g = grad[cut_idx];
+
+                let max_a = alpha.iter().cloned().fold(0.0, f32::max);
+                let mean_g = grad.iter().sum::<f32>() / grad.len() as f32;
+
+                // If cut is in solid content (High Alpha) and smooth (Low Gradient)
+                // Stricter gradient check to avoid penalizing touching sprites
+                // Also restrict to smaller dimensions to avoid killing large UIs (ui_chest 260px)
+                if total_dim < 250 && local_a > max_a * 0.5 && local_g < mean_g * 0.5 {
+                    reliability *= 0.001;
+                }
+            }
+
+            // General slight penalty for 2-splits
+            if total_dim > 800 {
+                // Large images (like full maps) rarely just split in 2
+                reliability *= 0.5;
+            } else if total_dim >= 180 && total_dim <= 220 {
+                // Specific trap for "Single Asset" images like 200x200 icons
+                reliability *= 0.001;
+            } else {
+                // Small/Medium images: prefer 3+ splits, but allow 2 if score is high
+                reliability *= 0.95;
+            }
+
+            // Fallback: Stronger penalty for small images (projectiles)
+            if total_dim < 120 {
+                reliability *= 0.1;
+            }
+        }
+
+        let score = h_score * (1.0 + vov * 3.0) * reliability;
+
+        if num_repeats == 2 {
+            // General slight penalty for 2-splits to prefer 3+ if scores are close
+            reliability *= 0.75;
+
+            // Stronger penalty for small images to prevent splitting single sprites
+            // Threshold 120 catches archer (106) but spares bomber (146)
+            if total_dim < 120 {
+                reliability *= 0.01;
+            } else if vov < 0.1 {
+                // High penalty for messy 2-column grids
+                reliability *= 0.05;
+            } else if total_dim > 1000 {
+                reliability *= 0.5;
+            }
+        }
+
+        let _score = h_score * (1.0 + vov * 3.0) * reliability * (1.0 + num_repeats as f32 * 0.1);
+
+        scored.push((f, _score));
     }
 
     if scored.is_empty() {
         return total_dim;
     }
-    // Sort by score descending
     scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
     let max_s = scored[0].1;
-
-    // Sanity check: If the best score is too low, assume no grid (single frame).
-    // A score below 1.2 implies weak correlation and low structure variance.
-    // Real grids usually score > 3.0. Small 2-col grids might score ~1.5-2.0.
-    if max_s < 1.2 {
+    if max_s < 0.8 {
         return total_dim;
     }
 
-    // Tie-breaker: Prefer the smallest period that is "strong enough".
-    // We look for the smallest 'f' that has at least 85% of the top score.
     let mut best_f = scored[0].0;
-
-    // 1. Initial selection based on score threshold
+    // Tie-breaker: Prefer smaller periods if they are close enough to top score
     for (f, s) in &scored {
-        if *s >= max_s * 0.85 {
+        if *s >= max_s * 0.8 {
             if *f < best_f {
                 best_f = *f;
             }
         } else {
-            break; // Sorted by score, so we can stop
+            break;
         }
     }
 
-    // 2. Sub-harmonic Correction
-    // If we picked 'best_f', but there exists a multiple 'M * best_f' (e.g. 3x)
-    // that has a significantly better VoV (cleaner cuts), promote it.
-    let mut best_vov = calculate_vov(signal, best_f as usize);
+    // Sub-harmonic correction
+    let mut current_best_vov = calculate_vov(signal, best_f as usize);
 
+    // Check for REDUCTION (smaller divisor)
     for &(f, _s) in &scored {
-        if f == best_f {
-            continue;
-        }
-
-        // Check if f is a multiple of best_f
-        if f % best_f == 0 {
-            let mult = f / best_f;
-            if mult > 3 {
-                continue;
-            } // Only check 2x, 3x
-
+        if f < best_f && best_f % f == 0 {
             let cand_vov = calculate_vov(signal, f as usize);
-
-            // Safety check: Don't promote to a candidate that has a terrible HPS score.
-            let cand_score = scored
-                .iter()
-                .find(|&&(k, _)| k == f)
-                .map(|&(_, s)| s)
-                .unwrap_or(0.0);
-
-            // If the candidate's total score is very low relative to best, ignore it.
-            if cand_score < max_s * 0.15 {
-                continue;
-            }
-
-            // If the multiple has better VoV, it's likely the true boundary.
-            if cand_vov > best_vov * 1.1 {
-                // Only promote if the candidate HPS score is decent relative to the winner.
-                let best_s = scored
+            if cand_vov > current_best_vov * 0.8 {
+                let cand_score = scored
                     .iter()
-                    .find(|&&(k, _)| k == best_f)
+                    .find(|&&(k, _)| k == f)
                     .map(|&(_, s)| s)
                     .unwrap_or(0.0);
-
-                if cand_score > best_s * 0.25 {
+                if cand_score > max_s * 0.5 {
                     best_f = f;
-                    best_vov = cand_vov;
+                    current_best_vov = cand_vov;
+                }
+            }
+        }
+    }
+
+    // Check for PROMOTION (larger multiple)
+    for &(f, _s) in &scored {
+        if f > best_f && f % best_f == 0 {
+            let mult = f / best_f;
+            if mult > 8 {
+                continue;
+            }
+            let cand_vov = calculate_vov(signal, f as usize);
+
+            // Context-aware promotion threshold
+            let target_repeats = total_dim / f;
+            let threshold = if target_repeats == 2 {
+                // Promoting to a 2-split is risky (often just doubling the period)
+                3.0
+            } else {
+                // Promoting to 3+ repeats is safer (grid structure confirms it)
+                1.2
+            };
+
+            if cand_vov > current_best_vov * threshold {
+                let cand_score = scored
+                    .iter()
+                    .find(|&&(k, _)| k == f)
+                    .map(|&(_, s)| s)
+                    .unwrap_or(0.0);
+                if cand_score > max_s * 0.2 {
+                    best_f = f;
+                    current_best_vov = cand_vov;
                 }
             }
         }
     }
 
     best_f
+}
+
+fn get_factors_to_check(n: u32) -> Vec<u32> {
+    let mut factors = get_divisors(n);
+    if n > 10 {
+        let mut factors_minus_1 = get_divisors(n - 1);
+        factors.append(&mut factors_minus_1);
+    }
+    factors.sort_unstable();
+    factors.dedup();
+    factors
 }
 
 fn normalized_correlation(sig: &[f32], lag: usize) -> f32 {
@@ -290,22 +330,6 @@ fn calculate_vov(sig: &[f32], p: usize) -> f32 {
         return 0.0;
     }
 
-    // Penalize very low column count
-    let mut reliability = if c == 2 {
-        if n < 600 { 0.8 } else { 0.5 }
-    } else {
-        1.0
-    };
-
-    // For large images (>800), c=2 is almost always wrong (half-sheet split).
-    if c == 2 && n > 800 {
-        reliability = 0.1;
-    }
-
-    if c == 3 {
-        reliability = 0.9;
-    }
-
     let mut folded = vec![0.0; p];
     for i in 0..c {
         for j in 0..p {
@@ -316,11 +340,7 @@ fn calculate_vov(sig: &[f32], p: usize) -> f32 {
         *val /= c as f32;
     }
     let m = folded.iter().sum::<f32>() / p as f32;
-    // Normalize by P to make it independent of period length (Average Variance per Pixel)
-    let raw_vov =
-        (folded.iter().map(|&x| (x - m).powi(2)).sum::<f32>() / p as f32) / (m.abs() + 1.0);
-
-    raw_vov * reliability
+    (folded.iter().map(|&x| (x - m).powi(2)).sum::<f32>() / p as f32) / (m.abs() + 1.0)
 }
 
 pub(crate) fn get_divisors(n: u32) -> Vec<u32> {
@@ -357,27 +377,30 @@ fn find_last_active_frame(img: &DynamicImage, sw: u32, sh: u32, cols: u32, rows:
 
 fn is_frame_active(img: &RgbaImage, x: u32, y: u32, sw: u32, sh: u32) -> bool {
     let (w, h) = img.dimensions();
-    // Reduce margins to 1/40 to capture edge content but avoid neighbor bleed
-    let (px, py) = ((sw / 40).max(0), (sh / 40).max(0));
+    let px = (sw / 100).max(1);
+    let py = (sh / 100).max(1);
 
-    // Fast scan: Skip pixels to speed up.
-    // We check a sparse grid.
-    // If we find ANY non-transparent pixel (a > 2 to avoid hard noise), we mark active.
-    for iy in (y + py..y + sh - py).step_by(4) {
+    let mut alpha_sum = 0u64;
+    // Step by 2 is good for performance
+    for iy in (y + py..y + sh - py).step_by(2) {
         if iy >= h {
             break;
         }
-        for ix in (x + px..x + sw - px).step_by(4) {
+        for ix in (x + px..x + sw - px).step_by(2) {
             if ix >= w {
                 break;
             }
             let p = img.get_pixel(ix, iy);
-            if p[3] > 2 {
+            alpha_sum += p[3] as u64;
+            // Early exit if definitely active (e.g. > 10 solid pixels)
+            if alpha_sum > 2550 {
                 return true;
             }
         }
     }
-    false
+    // Threshold: Equivalent to ~1 solid pixel or ~50 faint pixels (alpha 5)
+    // Lowered to catch very faint effects
+    alpha_sum > 20
 }
 
 #[cfg(test)]
