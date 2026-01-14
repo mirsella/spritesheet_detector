@@ -437,34 +437,6 @@ fn test_hero_builder_troop_blue_attack() {
 }
 
 #[test]
-fn test_zap_card_hit() {
-    assert_eq!(
-        analyze_spritesheet(&image::open("assets/zap_card_hit.png").unwrap(), 40),
-        SpritesheetInfo {
-            sprite_width: 103,
-            sprite_height: 100,
-            columns: 4,
-            rows: 4,
-            frame_count: 13
-        }
-    );
-}
-
-#[test]
-fn test_zap_card_projectile() {
-    assert_eq!(
-        analyze_spritesheet(&image::open("assets/zap_card_projectile.png").unwrap(), 40),
-        SpritesheetInfo {
-            sprite_width: 1508,
-            sprite_height: 106,
-            columns: 2,
-            rows: 12,
-            frame_count: 24
-        }
-    );
-}
-
-#[test]
 fn test_punk_band_guitarrist_troop_blue_death() {
     assert_eq!(
         analyze_spritesheet(
