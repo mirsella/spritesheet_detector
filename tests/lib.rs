@@ -350,3 +350,20 @@ fn test_chest_notif() {
         }
     );
 }
+
+#[test]
+fn test_archer_card_idle() {
+    assert_eq!(
+        analyze_spritesheet(
+            &image::open("assets/archer_card_blue_idle_n.png").unwrap(),
+            40
+        ),
+        SpritesheetInfo {
+            sprite_width: 400,
+            sprite_height: 400,
+            columns: 1,
+            rows: 1,
+            frame_count: 1
+        }
+    );
+}
