@@ -43,6 +43,48 @@ fn test_regression_bomb_card_projectile() {
 }
 
 #[test]
+fn test_regression_archer_card_blue_idle_n() {
+    assert_eq!(
+        analyze_spritesheet(&image::open("assets/regression_archer_card_blue_idle_n.png").unwrap()),
+        SpritesheetInfo {
+            sprite_width: 400,
+            sprite_height: 400,
+            columns: 1,
+            rows: 1,
+            frame_count: 1
+        }
+    );
+}
+
+#[test]
+fn test_regression_bomber_card_blue_n() {
+    assert_eq!(
+        analyze_spritesheet(&image::open("assets/regression_bomber_card_blue_n.png").unwrap()),
+        SpritesheetInfo {
+            sprite_width: 223,
+            sprite_height: 416,
+            columns: 1,
+            rows: 1,
+            frame_count: 1
+        }
+    );
+}
+
+#[test]
+fn test_regression_nav_main() {
+    assert_eq!(
+        analyze_spritesheet(&image::open("assets/regression_nav_main.png").unwrap()),
+        SpritesheetInfo {
+            sprite_width: 250,
+            sprite_height: 250,
+            columns: 1,
+            rows: 1,
+            frame_count: 1
+        }
+    );
+}
+
+#[test]
 fn test_asset_example() {
     assert_eq!(
         analyze_spritesheet(&image::open("assets/example.png").unwrap()),

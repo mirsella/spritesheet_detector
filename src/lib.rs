@@ -160,7 +160,7 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
         let max_a = alpha.iter().cloned().fold(0.0, f32::max);
         let mean_g = grad.iter().sum::<f32>() / grad.len() as f32;
         let mut bad_cuts = 0;
-        let checks = if num_repeats > 5 { 3 } else { num_repeats - 1 };
+        let checks = (num_repeats - 1).min(10);
 
         for k in 1..=checks {
             let cut_idx = (f * k) as usize;
@@ -172,14 +172,21 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
             let local_g = grad[cut_idx];
 
             // If cut is in solid content (High Alpha) and smooth (Low Gradient)
-            if local_a > max_a * 0.5 && local_g < mean_g * 0.5 {
+            // Relaxed thresholds to catch more "fake" grids
+            // Require gradient to be significant (absolute > 0.1) AND relative to mean
+            let is_edge = local_g > 0.1 && local_g > mean_g * 3.0;
+            if local_a > max_a * 0.3 && !is_edge {
                 bad_cuts += 1;
             }
         }
 
         if bad_cuts > 0 {
             let ratio = bad_cuts as f32 / checks as f32;
-            reliability *= 1.0 - (ratio * 0.8);
+            if ratio > 0.3 {
+                reliability *= 0.001; // Kill it if > 30% cuts are bad
+            } else {
+                reliability *= 1.0 - (ratio * 0.9);
+            }
         }
 
         // Penalty for very small periods (often texture/noise)
@@ -209,16 +216,15 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
         }
 
         // Bonus for "Sweet Spot" repeat counts (3 to 8)
-        // This favors 3x3, 4x4 grids over 1x1 or 20x20
+        // Only apply if VoV is very strong
         let repeat_bonus = if num_repeats >= 3 && num_repeats <= 8 {
-            1.2
-        } else if num_repeats == 2 {
-            1.05
+            if vov > 0.5 { 1.1 } else { 1.0 }
         } else {
             1.0
         };
 
         let score = h_score * vov_factor * reliability * repeat_bonus;
+
         scored.push((f, score));
     }
 
@@ -233,10 +239,12 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
     }
 
     let mut best_f = scored[0].0;
-    // Tie-breaker: Prefer smaller periods if they are close enough to top score
+
+    // Tie-breaker: Prefer larger periods (simpler grids) if they are close enough to top score
+    // This protects against over-fragmenting single assets
     for (f, s) in &scored {
-        if *s >= max_s * 0.8 {
-            if *f < best_f {
+        if *s >= max_s * 0.9 {
+            if *f > best_f {
                 best_f = *f;
             }
         } else {
