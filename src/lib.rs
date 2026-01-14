@@ -55,8 +55,9 @@ pub fn analyze_spritesheet(img: &DynamicImage, _gap_threshold: u32) -> Spriteshe
     );
 
     // 3. Content Validation: Frame Counting
+    // We assume frames are packed sequentially. We scan from the end to find the last active frame.
     let frame_count = if sprite_width > 0 && sprite_height > 0 {
-        count_active_frames(img, sprite_width, sprite_height, columns, rows)
+        find_last_active_frame(img, sprite_width, sprite_height, columns, rows)
     } else {
         0
     };
@@ -403,192 +404,46 @@ pub(crate) fn get_divisors(n: u32) -> Vec<u32> {
     res
 }
 
-fn count_active_frames(img: &DynamicImage, sw: u32, sh: u32, cols: u32, rows: u32) -> u32 {
+fn find_last_active_frame(img: &DynamicImage, sw: u32, sh: u32, cols: u32, rows: u32) -> u32 {
     let rgba = img.to_rgba8();
-    let scores: Vec<f32> = (0..rows * cols)
-        .into_par_iter()
-        .map(|idx| {
-            let (r, c) = (idx / cols, idx % cols);
-            cell_activity_score(&rgba, c * sw, r * sh, sw, sh)
-        })
-        .collect();
+    let total_frames = rows * cols;
 
-    if scores.is_empty() {
-        return 0;
-    }
+    for i in (0..total_frames).rev() {
+        let r = i / cols;
+        let c = i % cols;
+        let x = c * sw;
+        let y = r * sh;
 
-    let n = scores.len() as f32;
-    let mean = scores.iter().sum::<f32>() / n;
-    let variance = scores.iter().map(|s| (s - mean).powi(2)).sum::<f32>() / n;
-    let std_dev = variance.sqrt();
-    let cv = if mean > 1e-6 { std_dev / mean } else { 0.0 };
-
-    let mut sorted = scores.clone();
-    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-    let max_s = *sorted.last().unwrap_or(&0.0);
-
-    // Global Noise Floor:
-    // If the strongest frame is very weak, the whole image is likely empty or just noise.
-    if max_s < 0.05 {
-        return 0;
-    }
-
-    // Otsu's Thresholding (Simplified)
-    // We want to find a threshold 't' that maximizes inter-class variance between Noise (background) and Signal (sprites).
-    // We iterate through the sorted scores as potential thresholds.
-    let mut best_t = max_s * 0.1;
-    let mut max_sigma_b = 0.0;
-
-    // Only search between 5% and 80% of the range to avoid extremes
-    let start_idx = (scores.len() as f32 * 0.05) as usize;
-    let end_idx = (scores.len() as f32 * 0.95) as usize;
-
-    // Optimization: Precompute cumulative sums (integral image for 1D array)
-    // But for N < 10000, linear scan is fine.
-
-    for i in start_idx..end_idx {
-        let t = sorted[i];
-        if t < 0.01 {
-            continue;
-        } // Skip obvious noise
-
-        // Split into two groups
-        // Group 0: scores <= t
-        // Group 1: scores > t
-        // We can optimize this using indices since it's sorted.
-        let w0 = (i + 1) as f32;
-        let w1 = (scores.len() - (i + 1)) as f32;
-
-        if w0 == 0.0 || w1 == 0.0 {
-            continue;
-        }
-
-        let sum0: f32 = sorted[0..=i].iter().sum();
-        let mean0 = sum0 / w0;
-
-        let sum1: f32 = sorted[i + 1..].iter().sum();
-        let mean1 = sum1 / w1;
-
-        // Inter-class variance = w0 * w1 * (mean0 - mean1)^2
-        // (Simplified, omitting total weight division since it's constant)
-        let sigma_b = w0 * w1 * (mean0 - mean1).powi(2);
-
-        if sigma_b > max_sigma_b {
-            max_sigma_b = sigma_b;
-            best_t = t;
+        if is_frame_active(&rgba, x, y, sw, sh) {
+            return i + 1;
         }
     }
-
-    // Safety clamp: Ensure threshold isn't ridiculously high or low
-    // If Otsu picks a threshold that classifies > 95% as noise, it might be too aggressive.
-    // Or if it classifies noise as signal.
-
-    // Fallback/Bias: We prefer to include frames if unsure.
-    // Otsu tends to separate "strong content" from "weak content".
-    // We modify the threshold slightly down (0.5x) to be more inclusive.
-    best_t *= 0.5;
-
-    // Hard lower bound relative to max score to kill artifacts
-    // Lowered to 0.02 to allow very faint sprites (building_deconstruction etc.)
-    if cv < 0.5 {
-        best_t = best_t.max(max_s * 0.01);
-    } else {
-        best_t = best_t.max(max_s * 0.05);
-    }
-
-    #[cfg(test)]
-    eprintln!("  Otsu Threshold: {:.4} (Max Score: {:.4})", best_t, max_s);
-
-    scores.into_iter().filter(|&s| s > best_t).count() as u32
+    0
 }
 
-fn cell_activity_score(img: &RgbaImage, x: u32, y: u32, sw: u32, sh: u32) -> f32 {
-    let mut total_alpha = 0.0;
-    let mut max_a = 0u8;
-    let mut hist = [0u32; 256];
-    let mut pixels = 0;
-
-    // Reduce margins to 1/40 to capture edge content better
+fn is_frame_active(img: &RgbaImage, x: u32, y: u32, sw: u32, sh: u32) -> bool {
+    let (w, h) = img.dimensions();
+    // Reduce margins to 1/40 to capture edge content but avoid neighbor bleed
     let (px, py) = ((sw / 40).max(0), (sh / 40).max(0));
 
-    // Coherence check: Only count pixels that have at least one neighbor
-    // This filters out "salt and pepper" noise common in compression
-    let w = img.width();
-    let h = img.height();
-
-    let mut coherent_pixels = 0;
-
-    for iy in (y + py)..(y + sh - py) {
-        for ix in (x + px)..(x + sw - px) {
+    // Checkered scan: Skip every 2 pixels to speed up
+    // We check (0,0), (2,0), (0,2), (2,2)...
+    // If we find ANY non-transparent pixel (a > 2 to avoid hard noise), we mark active.
+    for iy in (y + py..y + sh - py).step_by(2) {
+        if iy >= h {
+            break;
+        }
+        for ix in (x + px..x + sw - px).step_by(2) {
+            if ix >= w {
+                break;
+            }
             let p = img.get_pixel(ix, iy);
-            let a = p[3];
-            if a > 0 {
-                // Check neighbors for coherence
-                let mut coherent = false;
-                // Simple 4-connectivity check
-                if ix > 0 && img.get_pixel(ix - 1, iy)[3] > 0 {
-                    coherent = true;
-                } else if ix < w - 1 && img.get_pixel(ix + 1, iy)[3] > 0 {
-                    coherent = true;
-                } else if iy > 0 && img.get_pixel(ix, iy - 1)[3] > 0 {
-                    coherent = true;
-                } else if iy < h - 1 && img.get_pixel(ix, iy + 1)[3] > 0 {
-                    coherent = true;
-                }
-
-                if coherent {
-                    total_alpha += f32::from(a) / 255.0;
-                    max_a = max_a.max(a);
-                    let l = (u32::from(p[0]) * 299 + u32::from(p[1]) * 587 + u32::from(p[2]) * 114)
-                        / 1000;
-                    hist[l.min(255) as usize] += 1;
-                    pixels += 1;
-                    coherent_pixels += 1;
-                }
+            if p[3] > 2 {
+                return true;
             }
         }
     }
-
-    if pixels == 0 {
-        return 0.0;
-    }
-
-    // Hard noise gate: if the brightest pixel is very faint, it's just compression noise.
-    // Lowered to 30 (~12%)
-    if max_a < 30 {
-        return 0.0;
-    }
-
-    // Absolute Coherent Pixel Count Gate
-    // Noise frames usually have < 10 coherent pixels (scattered specks).
-    // Valid frames (even small particles) usually have a cluster > 15-20 pixels.
-    if coherent_pixels < 15 {
-        return 0.0;
-    }
-
-    let area = ((sw - 2 * px) * (sh - 2 * py)) as f32;
-    let fill_ratio = total_alpha / area;
-
-    // Secondary noise gate for faint AND sparse content
-    // Since we check coherent_pixels, we can relax this.
-    // Only kill if basically invisible.
-    if max_a < 50 && fill_ratio < 0.001 {
-        return 0.0;
-    }
-    let peak = f32::from(max_a) / 255.0;
-
-    let mut ent = 0.0;
-    for &c in &hist {
-        if c > 0 {
-            let p = c as f32 / pixels as f32;
-            ent -= p * p.log2();
-        }
-    }
-    let ent_norm = ent / 8.0;
-
-    // Weight Entropy higher to favor "complex" visual content (VFX/Sprites) over "flat" noise.
-    // Reduced peak weight because noise can be bright.
-    (fill_ratio * 0.4) + (peak * 0.1) + (ent_norm * 0.5)
+    false
 }
 
 #[cfg(test)]
