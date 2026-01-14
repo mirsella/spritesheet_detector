@@ -352,15 +352,170 @@ fn test_chest_notif() {
 }
 
 #[test]
-fn test_archer_card_idle() {
+fn test_archer_troop_blue_projectile() {
     assert_eq!(
         analyze_spritesheet(
-            &image::open("assets/archer_card_blue_idle_n.png").unwrap(),
+            &image::open("assets/archer_troop_blue_projectile.png").unwrap(),
             40
         ),
         SpritesheetInfo {
-            sprite_width: 400,
-            sprite_height: 400,
+            sprite_width: 106,
+            sprite_height: 15,
+            columns: 1,
+            rows: 1,
+            frame_count: 1
+        }
+    );
+}
+
+#[test]
+fn test_mask_troop_projectile() {
+    assert_eq!(
+        analyze_spritesheet(
+            &image::open("assets/mask_troop_projectile.png").unwrap(),
+            40
+        ),
+        SpritesheetInfo {
+            sprite_width: 108,
+            sprite_height: 62,
+            columns: 1,
+            rows: 1,
+            frame_count: 1
+        }
+    );
+}
+
+#[test]
+fn test_ghoul_ripper_card_blue_peek() {
+    assert_eq!(
+        analyze_spritesheet(
+            &image::open("assets/ghoul_ripper_card_blue_peek.png").unwrap(),
+            40
+        ),
+        SpritesheetInfo {
+            sprite_width: 320,
+            sprite_height: 320,
+            columns: 7,
+            rows: 6,
+            frame_count: 42
+        }
+    );
+}
+
+#[test]
+fn test_ghoul_ripper_troop_blue_spawn() {
+    assert_eq!(
+        analyze_spritesheet(
+            &image::open("assets/ghoul_ripper_troop_blue_spawn.png").unwrap(),
+            40
+        ),
+        SpritesheetInfo {
+            sprite_width: 280,
+            sprite_height: 224,
+            columns: 6,
+            rows: 5,
+            frame_count: 29
+        }
+    );
+}
+
+#[test]
+fn test_hero_builder_troop_blue_attack() {
+    assert_eq!(
+        analyze_spritesheet(
+            &image::open("assets/hero_builder_troop_blue_attack.png").unwrap(),
+            40
+        ),
+        SpritesheetInfo {
+            sprite_width: 100,
+            sprite_height: 64,
+            columns: 4,
+            rows: 3,
+            frame_count: 11
+        }
+    );
+}
+
+#[test]
+fn test_zap_card_hit() {
+    assert_eq!(
+        analyze_spritesheet(&image::open("assets/zap_card_hit.png").unwrap(), 40),
+        SpritesheetInfo {
+            sprite_width: 103,
+            sprite_height: 100,
+            columns: 4,
+            rows: 4,
+            frame_count: 13
+        }
+    );
+}
+
+#[test]
+fn test_zap_card_projectile() {
+    assert_eq!(
+        analyze_spritesheet(&image::open("assets/zap_card_projectile.png").unwrap(), 40),
+        SpritesheetInfo {
+            sprite_width: 1508,
+            sprite_height: 106,
+            columns: 2,
+            rows: 12,
+            frame_count: 24
+        }
+    );
+}
+
+#[test]
+fn test_punk_band_guitarrist_troop_blue_death() {
+    assert_eq!(
+        analyze_spritesheet(
+            &image::open("assets/punk_band_guitarrist_troop_blue_death.png").unwrap(),
+            40
+        ),
+        SpritesheetInfo {
+            sprite_width: 340,
+            sprite_height: 304,
+            columns: 4,
+            rows: 5,
+            frame_count: 20
+        }
+    );
+}
+
+#[test]
+fn test_ui_chest_lock() {
+    assert_eq!(
+        analyze_spritesheet(&image::open("assets/UI_chest_lock.png").unwrap(), 40),
+        SpritesheetInfo {
+            sprite_width: 130,
+            sprite_height: 130,
+            columns: 3,
+            rows: 2,
+            frame_count: 6
+        }
+    );
+}
+
+#[test]
+fn test_card_glow() {
+    assert_eq!(
+        analyze_spritesheet(&image::open("assets/card_glow.png").unwrap(), 40),
+        SpritesheetInfo {
+            sprite_width: 438,
+            sprite_height: 514,
+            columns: 2,
+            rows: 2,
+            frame_count: 4
+        }
+    );
+}
+
+#[test]
+fn test_blue_cross() {
+    assert_eq!(
+        analyze_spritesheet(&image::open("assets/blue_cross.png").unwrap(), 40),
+        SpritesheetInfo {
+            sprite_width: 200,
+            sprite_height: 200,
             columns: 1,
             rows: 1,
             frame_count: 1
