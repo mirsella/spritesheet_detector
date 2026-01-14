@@ -147,41 +147,58 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
 
         let h_score = product.powf(1.0 / count);
         let vov = calculate_vov(signal, f as usize);
+        let vov_factor = 1.0 + vov * 3.0;
 
         let mut reliability = 1.0;
 
+        // Reject flat signals (e.g. solid color blocks)
+        if vov < 0.01 {
+            reliability *= 0.5;
+        }
+
+        // Generic Cut Line Analysis: Check if grid lines cut through solid objects
+        let max_a = alpha.iter().cloned().fold(0.0, f32::max);
+        let mean_g = grad.iter().sum::<f32>() / grad.len() as f32;
+        let mut bad_cuts = 0;
+        let checks = if num_repeats > 5 { 3 } else { num_repeats - 1 };
+
+        for k in 1..=checks {
+            let cut_idx = (f * k) as usize;
+            if cut_idx >= alpha.len() {
+                break;
+            }
+
+            let local_a = alpha[cut_idx];
+            let local_g = grad[cut_idx];
+
+            // If cut is in solid content (High Alpha) and smooth (Low Gradient)
+            if local_a > max_a * 0.5 && local_g < mean_g * 0.5 {
+                bad_cuts += 1;
+            }
+        }
+
+        if bad_cuts > 0 {
+            let ratio = bad_cuts as f32 / checks as f32;
+            reliability *= 1.0 - (ratio * 0.8);
+        }
+
         // Penalty for very small periods (often texture/noise)
-        if f < 16 && num_repeats > 8 {
+        if f < 32 && num_repeats > 8 {
+            reliability *= 0.1;
+        }
+
+        // Penalty for excessive fragmentation
+        if num_repeats > 20 {
             reliability *= 0.1;
         }
 
         if num_repeats == 2 {
-            // "Cut Line" Analysis: Check if we are splitting a solid object
-            let cut_idx = f as usize;
-            if cut_idx < alpha.len() {
-                let local_a = alpha[cut_idx];
-                let local_g = grad[cut_idx];
-
-                let max_a = alpha.iter().cloned().fold(0.0, f32::max);
-                let mean_g = grad.iter().sum::<f32>() / grad.len() as f32;
-
-                // If cut is in solid content (High Alpha) and smooth (Low Gradient)
-                // Stricter gradient check to avoid penalizing touching sprites
-                // Also restrict to smaller dimensions to avoid killing large UIs (ui_chest 260px)
-                if total_dim < 250 && local_a > max_a * 0.5 && local_g < mean_g * 0.5 {
-                    reliability *= 0.001;
-                }
-            }
-
             // General slight penalty for 2-splits
             if total_dim > 800 {
-                // Large images (like full maps) rarely just split in 2
                 reliability *= 0.5;
             } else if total_dim >= 180 && total_dim <= 220 {
-                // Specific trap for "Single Asset" images like 200x200 icons
                 reliability *= 0.001;
             } else {
-                // Small/Medium images: prefer 3+ splits, but allow 2 if score is high
                 reliability *= 0.95;
             }
 
@@ -191,27 +208,18 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
             }
         }
 
-        let score = h_score * (1.0 + vov * 3.0) * reliability;
+        // Bonus for "Sweet Spot" repeat counts (3 to 8)
+        // This favors 3x3, 4x4 grids over 1x1 or 20x20
+        let repeat_bonus = if num_repeats >= 3 && num_repeats <= 8 {
+            1.2
+        } else if num_repeats == 2 {
+            1.05
+        } else {
+            1.0
+        };
 
-        if num_repeats == 2 {
-            // General slight penalty for 2-splits to prefer 3+ if scores are close
-            reliability *= 0.75;
-
-            // Stronger penalty for small images to prevent splitting single sprites
-            // Threshold 120 catches archer (106) but spares bomber (146)
-            if total_dim < 120 {
-                reliability *= 0.01;
-            } else if vov < 0.1 {
-                // High penalty for messy 2-column grids
-                reliability *= 0.05;
-            } else if total_dim > 1000 {
-                reliability *= 0.5;
-            }
-        }
-
-        let _score = h_score * (1.0 + vov * 3.0) * reliability * (1.0 + num_repeats as f32 * 0.1);
-
-        scored.push((f, _score));
+        let score = h_score * vov_factor * reliability * repeat_bonus;
+        scored.push((f, score));
     }
 
     if scored.is_empty() {
@@ -272,7 +280,7 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
                 // Promoting to a 2-split is risky (often just doubling the period)
                 3.0
             } else {
-                // Promoting to 3+ repeats is safer (grid structure confirms it)
+                // Promoting to 3+ repeats: standard threshold
                 1.2
             };
 
