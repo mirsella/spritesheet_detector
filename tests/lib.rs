@@ -85,6 +85,90 @@ fn test_regression_nav_main() {
 }
 
 #[test]
+fn test_regression_coffin_maw_card() {
+    assert_eq!(
+        analyze_spritesheet(&image::open("assets/regression_coffin_maw_card.png").unwrap()),
+        SpritesheetInfo {
+            sprite_width: 400,
+            sprite_height: 400,
+            columns: 1,
+            rows: 1,
+            frame_count: 1
+        }
+    );
+}
+
+#[test]
+fn test_regression_crossbow_card() {
+    assert_eq!(
+        analyze_spritesheet(&image::open("assets/regression_crossbow_card.png").unwrap()),
+        SpritesheetInfo {
+            sprite_width: 383,
+            sprite_height: 320,
+            columns: 1,
+            rows: 1,
+            frame_count: 1
+        }
+    );
+}
+
+#[test]
+fn test_regression_border_s_1() {
+    assert_eq!(
+        analyze_spritesheet(&image::open("assets/regression_border_s_1.png").unwrap()),
+        SpritesheetInfo {
+            sprite_width: 200,
+            sprite_height: 1008,
+            columns: 1,
+            rows: 1,
+            frame_count: 1
+        }
+    );
+}
+
+#[test]
+fn test_regression_cardframes_gold() {
+    assert_eq!(
+        analyze_spritesheet(&image::open("assets/regression_cardframes_gold.png").unwrap()),
+        SpritesheetInfo {
+            sprite_width: 720,
+            sprite_height: 1000,
+            columns: 1,
+            rows: 1,
+            frame_count: 1
+        }
+    );
+}
+
+#[test]
+fn test_regression_cardframes_ranged() {
+    assert_eq!(
+        analyze_spritesheet(&image::open("assets/regression_cardframes_ranged.png").unwrap()),
+        SpritesheetInfo {
+            sprite_width: 720,
+            sprite_height: 1000,
+            columns: 1,
+            rows: 1,
+            frame_count: 1
+        }
+    );
+}
+
+#[test]
+fn test_regression_cardframes_tower() {
+    assert_eq!(
+        analyze_spritesheet(&image::open("assets/regression_cardframes_tower.png").unwrap()),
+        SpritesheetInfo {
+            sprite_width: 720,
+            sprite_height: 1000,
+            columns: 1,
+            rows: 1,
+            frame_count: 1
+        }
+    );
+}
+
+#[test]
 fn test_asset_example() {
     assert_eq!(
         analyze_spritesheet(&image::open("assets/example.png").unwrap()),

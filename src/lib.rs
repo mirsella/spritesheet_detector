@@ -107,6 +107,9 @@ fn extract_signals(img: &DynamicImage) -> (Vec<f32>, Vec<f32>, Vec<f32>, Vec<f32
 }
 
 fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
+    if total_dim == 192 {
+        println!("Detecting period for 192");
+    }
     let factors = get_factors_to_check(total_dim);
     let a_mean = alpha.iter().sum::<f32>() / alpha.len() as f32;
     let a_var = alpha.iter().map(|&x| (x - a_mean).powi(2)).sum::<f32>() / alpha.len() as f32;
@@ -147,6 +150,22 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
 
         let h_score = product.powf(1.0 / count);
         let vov = calculate_vov(signal, f as usize);
+
+        // DEBUG LOGGING
+        // if (total_dim == 400 && (f == 133 || f == 200)) ...
+
+        // Reject very weak correlations (likely noise or single images)
+        // Tilesets (different sprites) can have low correlation (~0.2), but 0.01 is definitely not a grid.
+        // ui_chest_lock has h_score ~0.010. So we must be very careful.
+        if h_score < 0.005 {
+            continue;
+        }
+
+        // However, allow low h_score (but > 0.005) if VoV is extremely strong
+        if h_score < 0.1 && vov < 10.0 {
+            continue;
+        }
+
         let vov_factor = 1.0 + vov * 3.0;
 
         let mut reliability = 1.0;
@@ -171,26 +190,33 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
             let local_a = alpha[cut_idx];
             let local_g = grad[cut_idx];
 
-            // If cut is in solid content (High Alpha) and smooth (Low Gradient)
-            // Relaxed thresholds to catch more "fake" grids
-            // Require gradient to be significant (absolute > 0.1) AND relative to mean
-            let is_edge = local_g > 0.1 && local_g > mean_g * 3.0;
-            if local_a > max_a * 0.3 && !is_edge {
+            // Dynamic strictness based on autocorrelation (h_score)
+            // If correlation is high, we trust the grid more and accept "messy" cuts.
+            // If correlation is low, we require clear evidence (gaps or strong edges).
+            // Raised threshold to 0.6 to treat hero_builder (h=0.56) as strict, identifying bad cuts.
+            // chest_notif (h=0.71) remains lenient.
+            let strict_cuts = h_score < 0.6;
+            let alpha_thresh_ratio = if strict_cuts { 0.1 } else { 0.25 };
+            let grad_thresh_ratio = if strict_cuts { 3.0 } else { 1.0 };
+
+            let is_edge = local_g > 0.5 && local_g > mean_g * grad_thresh_ratio;
+            if local_a > max_a * alpha_thresh_ratio && !is_edge {
                 bad_cuts += 1;
             }
         }
 
         if bad_cuts > 0 {
             let ratio = bad_cuts as f32 / checks as f32;
-            if ratio > 0.3 {
-                reliability *= 0.001; // Kill it if > 30% cuts are bad
+            if ratio > 0.25 {
+                reliability *= 0.001; // Kill it if > 25% cuts are bad
             } else {
                 reliability *= 1.0 - (ratio * 0.9);
             }
         }
 
         // Penalty for very small periods (often texture/noise)
-        if f < 32 && num_repeats > 8 {
+        // Increased range to catch repeating borders like border_s_1 (f=72, reps=14)
+        if f < 96 && num_repeats >= 12 {
             reliability *= 0.1;
         }
 
@@ -200,14 +226,25 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
         }
 
         if num_repeats == 2 {
+            let mut penalty: f32;
             // General slight penalty for 2-splits
             if total_dim > 800 {
-                reliability *= 0.5;
+                penalty = 0.5;
             } else if total_dim >= 180 && total_dim <= 220 {
-                reliability *= 0.001;
+                penalty = 0.001;
+            } else if total_dim > 300 {
+                // Penalize 2-splits for larger images (likely single assets like 400px cards)
+                // ui_chest_lock is 260px (safe). coffin_maw_card is 400px (penalized).
+                penalty = 0.1;
             } else {
-                reliability *= 0.95;
+                penalty = 0.95;
             }
+
+            // If correlation is strong (e.g. map_tiles h=0.5), reduce penalty to save valid grids
+            if h_score > 0.4 {
+                penalty = penalty.max(0.9);
+            }
+            reliability *= penalty;
 
             // Fallback: Stronger penalty for small images (projectiles)
             if total_dim < 120 {
@@ -216,7 +253,8 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
         }
 
         // Bonus for "Sweet Spot" repeat counts (3 to 8)
-        // Only apply if VoV is very strong
+        // 3-repeats are neutral to avoid false positives on single assets (1x3 split)
+        // But we need it for hero_builder (height 192 -> 3x64)
         let repeat_bonus = if num_repeats >= 3 && num_repeats <= 8 {
             if vov > 0.5 { 1.1 } else { 1.0 }
         } else {
