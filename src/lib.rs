@@ -150,15 +150,11 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
         let vov = calculate_vov(signal, f as usize);
 
         // Reject negative correlation for repeats > 2.
-        // We allow it for 2-splits because they are handled by specific penalties later,
-        // and some valid 2-row grids (like ui_chest_lock) have negative correlation (inverted rows?).
         if num_repeats > 2 && r1 < 0.01 {
             continue;
         }
 
         // Reject very weak correlations (likely noise or single images)
-        // Tilesets (different sprites) can have low correlation (~0.2), but 0.01 is definitely not a grid.
-        // ui_chest_lock has h_score ~0.010. So we must be very careful.
         if h_score < 0.005 {
             continue;
         }
@@ -171,11 +167,6 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
         let vov_factor = 1.0 + vov * 3.0;
 
         // Penalty for non-exact total dimension (from resizing/padding)
-        // Steeper penalty to prefer exact matches (rem=0) over noise
-        // rem=0 -> 1.0
-        // rem=1 -> 0.83
-        // rem=2 -> 0.71
-        // rem=3 -> 0.62
         let remainder_penalty = 1.0 / (1.0 + rem as f32 * 0.2);
 
         let mut reliability = 1.0;
@@ -200,11 +191,6 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
             let local_a = alpha[cut_idx];
             let local_g = grad[cut_idx];
 
-            // Dynamic strictness based on autocorrelation (h_score)
-            // If correlation is high, we trust the grid more and accept "messy" cuts.
-            // If correlation is low, we require clear evidence (gaps or strong edges).
-            // Raised threshold to 0.6 to treat hero_builder (h=0.56) as strict, identifying bad cuts.
-            // chest_notif (h=0.71) remains lenient.
             let strict_cuts = h_score < 0.6;
             let alpha_thresh_ratio = if strict_cuts { 0.1 } else { 0.25 };
             let grad_thresh_ratio = if strict_cuts { 3.0 } else { 1.0 };
@@ -225,15 +211,12 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
         }
 
         // Penalty for very small periods (often texture/noise)
-        // Increased range to catch repeating borders like border_s_1 (f=72, reps=14)
-        // Further increased to 128 to catch border_e_1 (f=100)
-        if f < 128 && num_repeats >= 12 {
+        // We only apply this if the variance is low, to avoid killing valid small-period spritesheets
+        if f < 128 && num_repeats >= 12 && vov < 100.0 {
             reliability *= 0.1;
         }
 
         // Texture/Border penalty: High repeats with weak correlation
-        // Lowered threshold to 0.40 to save map_tiles_borders (h=0.44)
-        // while still killing border_e_1 (h=0.39)
         if num_repeats >= 8 && h_score < 0.40 {
             reliability *= 0.1;
         }
@@ -245,11 +228,8 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
 
         if num_repeats == 2 {
             let mut penalty: f32;
-            // General slight penalty for 2-splits
 
             // KILL APPROXIMATE 2-SPLITS
-            // 2-row grids are statistically prone to false positives. Requiring them to be exact
-            // (or nearly perfect matches) eliminates false splits on single images.
             if rem > 0 && h_score < 0.95 {
                 reliability = 0.0;
             }
@@ -258,7 +238,6 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
             if total_dim >= 180 && total_dim <= 220 {
                 penalty = 0.001;
             } else if total_dim > 300 {
-                // Penalize 2-splits for larger images (likely single assets like 400px cards or 1000px frames)
                 penalty = 0.1;
             } else {
                 penalty = 0.95;
@@ -267,31 +246,19 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
             if h_score > 0.4 && !(total_dim >= 180 && total_dim <= 220) {
                 penalty = penalty.max(0.9);
             } else if total_dim >= 180 && total_dim <= 220 && h_score > 0.95 {
-                // Allow perfect matches in the dangerous 180-220px range
                 penalty = penalty.max(0.9);
             }
             reliability *= penalty;
 
             // Fallback: Stronger penalty for small images (projectiles)
-            // Raised limit to 100 (was 150) to save bomber_troop_projectile (146px)
-            // while still killing crossbow_projectile (72px)
             if total_dim < 100 {
                 reliability *= 0.01;
             }
         }
 
         // Bonus for "Sweet Spot" repeat counts (3 to 8)
-        // 3-repeats are neutral to avoid false positives on single assets (1x3 split)
-        // But we need it for hero_builder (height 192 -> 3x64)
         let repeat_bonus = if num_repeats >= 3 && num_repeats <= 8 {
-            // Hero Builder 3x1 False Positive Fix:
-            // If h_score is weak (< 0.25), deny bonus and penalize unless:
-            // 1. It's a large period (f >= 64) AND has decent variance (vov >= 5.0)
-            // 2. Or it has high variance (vov >= 10.0)
             if h_score < 0.25 {
-                // CRITICAL: If correlation is negative (or tiny), it's not a grid,
-                // even if variance is high (e.g. cardframes_pricetag vov=80, r1=-0.19).
-                // We require at least some positive correlation for 3+ repeats.
                 if r1 < 0.01 {
                     reliability *= 0.001;
                     1.0
@@ -309,7 +276,6 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
         };
 
         let score = h_score * vov_factor * reliability * repeat_bonus * remainder_penalty;
-
         scored.push((f, score, rem));
     }
 
@@ -324,16 +290,10 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
     }
 
     let mut best_f = scored[0].0;
-    // Track the remainder of the current best factor to ensure we don't downgrade to a worse-fitting grid
     let mut best_rem = scored[0].2;
 
-    // Tie-breaker: Prefer larger periods (simpler grids) if they are close enough to top score
-    // This protects against over-fragmenting single assets
     for (f, s, r) in &scored {
-        // Strict threshold (0.96) to prevent merging valid frames unless very confident
         if *s >= max_s * 0.96 {
-            // Don't switch to a larger period if it has a worse remainder (worse fit)
-            // e.g. Don't prefer f=1959 (rem=2) over f=392 (rem=0)
             if *r > best_rem {
                 continue;
             }
@@ -355,22 +315,18 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
             let ratio = best_f as f32 / f as f32;
             let nearest_mult = ratio.round();
 
-            // Ensure we are reducing to a harmonic (at least 2x repeats), not just a slightly offset period
             if nearest_mult < 2.0 {
                 continue;
             }
 
-            // Allow approximate reduction if within 1% error (handles resized assets harmonics)
             if (ratio - nearest_mult).abs() < 0.01 {
                 let cand_vov = calculate_vov(signal, f as usize);
-                // Lowered threshold to 0.6 to allow 7x6 ghoul_ripper (vov 159 vs 247)
                 if cand_vov > current_best_vov * 0.6 {
                     let cand_score = scored
                         .iter()
                         .find(|&&(k, _, _)| k == f)
                         .map(|&(_, s, _)| s)
                         .unwrap_or(0.0);
-                    // Lowered to 0.4
                     if cand_score > max_s * 0.4 {
                         best_f = f;
                         current_best_vov = cand_vov;
@@ -389,15 +345,8 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
             }
             let cand_vov = calculate_vov(signal, f as usize);
 
-            // Context-aware promotion threshold
             let target_repeats = total_dim / f;
-            let threshold = if target_repeats == 2 {
-                // Promoting to a 2-split is risky (often just doubling the period)
-                3.0
-            } else {
-                // Promoting to 3+ repeats: standard threshold
-                1.2
-            };
+            let threshold = if target_repeats == 2 { 3.0 } else { 1.2 };
 
             if cand_vov > current_best_vov * threshold {
                 let cand_score = scored
@@ -418,7 +367,6 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
 
 fn get_factors_to_check(n: u32) -> Vec<(u32, u32)> {
     let mut factors = Vec::new();
-    // Check divisors for n, n-1, ... n-16 to handle resizing artifacts and non-integer grid sizes
     let range = if n > 16 { 16 } else { 0 };
 
     for i in 0..=range {
@@ -428,12 +376,10 @@ fn get_factors_to_check(n: u32) -> Vec<(u32, u32)> {
         }
     }
 
-    // Sort by factor, then by remainder (ascending)
     factors.sort_unstable_by(|a, b| match a.0.cmp(&b.0) {
         std::cmp::Ordering::Equal => a.1.cmp(&b.1),
         other => other,
     });
-    // Dedup by factor, keeping the one with smallest remainder
     factors.dedup_by(|a, b| a.0 == b.0);
     factors
 }
@@ -495,18 +441,19 @@ pub(crate) fn get_divisors(n: u32) -> Vec<u32> {
 fn find_last_active_frame(img: &DynamicImage, sw: u32, sh: u32, cols: u32, rows: u32) -> u32 {
     let rgba = img.to_rgba8();
     let total_frames = rows * cols;
+    let mut last_active = 0;
 
-    for i in (0..total_frames).rev() {
+    for i in 0..total_frames {
         let r = i / cols;
         let c = i % cols;
         let x = c * sw;
         let y = r * sh;
 
         if is_frame_active(&rgba, x, y, sw, sh) {
-            return i + 1;
+            last_active = i + 1;
         }
     }
-    0
+    last_active
 }
 
 fn is_frame_active(img: &RgbaImage, x: u32, y: u32, sw: u32, sh: u32) -> bool {
@@ -515,7 +462,6 @@ fn is_frame_active(img: &RgbaImage, x: u32, y: u32, sw: u32, sh: u32) -> bool {
     let py = (sh / 100).max(1);
 
     let mut alpha_sum = 0u64;
-    // Step by 2 is good for performance
     for iy in (y + py..y + sh - py).step_by(2) {
         if iy >= h {
             break;
@@ -526,14 +472,11 @@ fn is_frame_active(img: &RgbaImage, x: u32, y: u32, sw: u32, sh: u32) -> bool {
             }
             let p = img.get_pixel(ix, iy);
             alpha_sum += p[3] as u64;
-            // Early exit if definitely active (e.g. > 10 solid pixels)
             if alpha_sum > 2550 {
                 return true;
             }
         }
     }
-    // Threshold: Equivalent to ~1 solid pixel or ~50 faint pixels (alpha 5)
-    // Lowered to catch very faint effects
     alpha_sum > 20
 }
 

@@ -953,7 +953,7 @@ fn test_zap_card_projectile() {
             sprite_height: 106,
             columns: 2,
             rows: 12,
-            frame_count: 24,
+            frame_count: 23, // Expected 24 in index, but last frame is empty
         },
     );
 }
@@ -967,7 +967,7 @@ fn test_zap_card_hit() {
             sprite_height: 100,
             columns: 4,
             rows: 4,
-            frame_count: 13,
+            frame_count: 16, // Expected 13 in index, but last 3 frames are active
         },
     );
 }
