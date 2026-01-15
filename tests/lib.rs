@@ -788,3 +788,45 @@ fn test_regression_chest_common_1_open_idle() {
         }
     );
 }
+
+#[test]
+fn test_regression_totem_tower_troop_blue_idle_n() {
+    assert_eq!(
+        analyze_spritesheet(&image::open("assets/totem_tower_troop_blue_idle_n.png").unwrap()),
+        SpritesheetInfo {
+            sprite_width: 296,
+            sprite_height: 604,
+            columns: 8,
+            rows: 7,
+            frame_count: 50,
+        }
+    );
+}
+
+#[test]
+fn test_regression_chest_rare_1_call() {
+    assert_eq!(
+        analyze_spritesheet(&image::open("assets/chest_rare_1_call.png").unwrap()),
+        SpritesheetInfo {
+            sprite_width: 942,
+            sprite_height: 809,
+            columns: 5,
+            rows: 5,
+            frame_count: 25,
+        }
+    );
+}
+
+#[test]
+fn test_regression_chest_common_4_open_idle() {
+    assert_eq!(
+        analyze_spritesheet(&image::open("assets/chest_common_4_open_idle.png").unwrap()),
+        SpritesheetInfo {
+            sprite_width: 942,
+            sprite_height: 809,
+            columns: 8,
+            rows: 8,
+            frame_count: 60,
+        }
+    );
+}
