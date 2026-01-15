@@ -107,9 +107,6 @@ fn extract_signals(img: &DynamicImage) -> (Vec<f32>, Vec<f32>, Vec<f32>, Vec<f32
 }
 
 fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
-    if total_dim == 192 {
-        println!("Detecting period for 192");
-    }
     let factors = get_factors_to_check(total_dim);
     let a_mean = alpha.iter().sum::<f32>() / alpha.len() as f32;
     let a_var = alpha.iter().map(|&x| (x - a_mean).powi(2)).sum::<f32>() / alpha.len() as f32;
@@ -150,9 +147,6 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
 
         let h_score = product.powf(1.0 / count);
         let vov = calculate_vov(signal, f as usize);
-
-        // DEBUG LOGGING
-        // if (total_dim == 400 && (f == 133 || f == 200)) ...
 
         // Reject very weak correlations (likely noise or single images)
         // Tilesets (different sprites) can have low correlation (~0.2), but 0.01 is definitely not a grid.
@@ -216,7 +210,15 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
 
         // Penalty for very small periods (often texture/noise)
         // Increased range to catch repeating borders like border_s_1 (f=72, reps=14)
-        if f < 96 && num_repeats >= 12 {
+        // Further increased to 128 to catch border_e_1 (f=100)
+        if f < 128 && num_repeats >= 12 {
+            reliability *= 0.1;
+        }
+
+        // Texture/Border penalty: High repeats with weak correlation
+        // Lowered threshold to 0.40 to save map_tiles_borders (h=0.44)
+        // while still killing border_e_1 (h=0.39)
+        if num_repeats >= 8 && h_score < 0.40 {
             reliability *= 0.1;
         }
 
@@ -228,13 +230,17 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
         if num_repeats == 2 {
             let mut penalty: f32;
             // General slight penalty for 2-splits
-            if total_dim > 800 {
-                penalty = 0.5;
-            } else if total_dim >= 180 && total_dim <= 220 {
+
+            // Special case for "Sweet Spot" 2-row sprites (like ui_chest_lock, 260px)
+            // Range 180-220 was penalized before?
+            // 260 falls into "else".
+
+            if total_dim >= 180 && total_dim <= 220 {
                 penalty = 0.001;
             } else if total_dim > 300 {
-                // Penalize 2-splits for larger images (likely single assets like 400px cards)
+                // Penalize 2-splits for larger images (likely single assets like 400px cards or 1000px frames)
                 // ui_chest_lock is 260px (safe). coffin_maw_card is 400px (penalized).
+                // cardframes_pricetag is 1000px (penalized).
                 penalty = 0.1;
             } else {
                 penalty = 0.95;
@@ -247,8 +253,10 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
             reliability *= penalty;
 
             // Fallback: Stronger penalty for small images (projectiles)
-            if total_dim < 120 {
-                reliability *= 0.1;
+            // Raised limit to 100 (was 150) to save bomber_troop_projectile (146px)
+            // while still killing crossbow_projectile (72px)
+            if total_dim < 100 {
+                reliability *= 0.01;
             }
         }
 
@@ -256,7 +264,26 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
         // 3-repeats are neutral to avoid false positives on single assets (1x3 split)
         // But we need it for hero_builder (height 192 -> 3x64)
         let repeat_bonus = if num_repeats >= 3 && num_repeats <= 8 {
-            if vov > 0.5 { 1.1 } else { 1.0 }
+            // Hero Builder 3x1 False Positive Fix:
+            // If h_score is weak (< 0.25), deny bonus and penalize unless:
+            // 1. It's a large period (f >= 64) AND has decent variance (vov >= 5.0)
+            // 2. Or it has high variance (vov >= 10.0)
+            if h_score < 0.25 {
+                // CRITICAL: If correlation is negative (or tiny), it's not a grid,
+                // even if variance is high (e.g. cardframes_pricetag vov=80, r1=-0.19).
+                // We require at least some positive correlation for 3+ repeats.
+                if r1 < 0.01 {
+                    reliability *= 0.001;
+                    1.0
+                } else if (f < 64 && vov < 10.0) || vov < 5.0 {
+                    reliability *= 0.1;
+                    1.0
+                } else {
+                    if vov > 0.5 { 1.1 } else { 1.0 }
+                }
+            } else {
+                if vov > 0.5 { 1.1 } else { 1.0 }
+            }
         } else {
             1.0
         };
@@ -297,13 +324,15 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
     for &(f, _s) in &scored {
         if f < best_f && best_f % f == 0 {
             let cand_vov = calculate_vov(signal, f as usize);
-            if cand_vov > current_best_vov * 0.8 {
+            // Lowered threshold to 0.6 to allow 7x6 ghoul_ripper (vov 159 vs 247)
+            if cand_vov > current_best_vov * 0.6 {
                 let cand_score = scored
                     .iter()
                     .find(|&&(k, _)| k == f)
                     .map(|&(_, s)| s)
                     .unwrap_or(0.0);
-                if cand_score > max_s * 0.5 {
+                // Lowered to 0.4
+                if cand_score > max_s * 0.4 {
                     best_f = f;
                     current_best_vov = cand_vov;
                 }

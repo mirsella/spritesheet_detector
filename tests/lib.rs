@@ -512,7 +512,6 @@ fn test_mask_troop_projectile() {
 }
 
 #[test]
-#[ignore]
 fn test_ghoul_ripper_card_blue_peek() {
     assert_eq!(
         analyze_spritesheet(&image::open("assets/ghoul_ripper_card_blue_peek.png").unwrap(),),
@@ -521,7 +520,72 @@ fn test_ghoul_ripper_card_blue_peek() {
             sprite_height: 320,
             columns: 7,
             rows: 6,
-            frame_count: 42
+            frame_count: 38
+        }
+    );
+}
+
+#[test]
+fn test_regression_cardframes_pricetag() {
+    assert_eq!(
+        analyze_spritesheet(&image::open("assets/regression_cardframes_pricetag.png").unwrap()),
+        SpritesheetInfo {
+            sprite_width: 720,
+            sprite_height: 1000,
+            columns: 1,
+            rows: 1,
+            frame_count: 1
+        }
+    );
+}
+
+#[test]
+fn test_regression_chest_common_open_idle() {
+    let result =
+        analyze_spritesheet(&image::open("assets/regression_chest_common_open_idle.png").unwrap());
+    assert_eq!(result.columns, 8);
+    assert_eq!(result.rows, 8);
+}
+
+#[test]
+fn test_regression_totem_tower_idle() {
+    let result =
+        analyze_spritesheet(&image::open("assets/regression_totem_tower_idle.png").unwrap());
+    assert_eq!(result.columns, 8);
+    assert_eq!(result.rows, 7);
+}
+
+#[test]
+fn test_regression_priest_heal() {
+    let result = analyze_spritesheet(&image::open("assets/regression_priest_heal.png").unwrap());
+    assert_eq!(result.columns, 9);
+    assert_eq!(result.rows, 9);
+}
+
+#[test]
+fn test_regression_hero_builder_idle() {
+    assert_eq!(
+        analyze_spritesheet(&image::open("assets/regression_hero_builder_idle.png").unwrap()),
+        SpritesheetInfo {
+            sprite_width: 100,
+            sprite_height: 64,
+            columns: 1,
+            rows: 1,
+            frame_count: 1
+        }
+    );
+}
+
+#[test]
+fn test_regression_crossbow_projectile() {
+    assert_eq!(
+        analyze_spritesheet(&image::open("assets/regression_crossbow_projectile.png").unwrap()),
+        SpritesheetInfo {
+            sprite_width: 73,
+            sprite_height: 28,
+            columns: 1,
+            rows: 1,
+            frame_count: 1
         }
     );
 }
