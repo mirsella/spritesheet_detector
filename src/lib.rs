@@ -116,12 +116,8 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
     let mean = signal.iter().sum::<f32>() / signal.len() as f32;
     let detrended: Vec<f32> = signal.iter().map(|&x| x - mean).collect();
 
-    if total_dim == 200 {
-        // println!("Debugging 200px Border");
-    }
-
     let mut scored = Vec::new();
-    for &f in &factors {
+    for &(f, rem) in &factors {
         if f < 4 || f > total_dim / 2 {
             continue;
         }
@@ -140,31 +136,18 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
 
         let mut product = r1.max(0.01);
         let mut count = 1.0;
-        if (f as usize * 2) < detrended.len() {
+        // Ignore checks with very small overlap (< 8 pixels) to avoid noise
+        if (f as usize * 2) < detrended.len().saturating_sub(8) {
             product *= r2.max(0.01);
             count += 1.0;
         }
-        if (f as usize * 3) < detrended.len() {
+        if (f as usize * 3) < detrended.len().saturating_sub(8) {
             product *= r3.max(0.01);
             count += 1.0;
         }
 
         let h_score = product.powf(1.0 / count);
         let vov = calculate_vov(signal, f as usize);
-
-        if total_dim == 260 {
-            println!(
-                "  Checking f={} (reps={}): r1={:.4}, h_score={:.4}, vov={:.4}",
-                f, num_repeats, r1, h_score, vov
-            );
-        }
-
-        if total_dim == 200 {
-            println!(
-                "  Checking f={} (reps={}): r1={:.4}, h_score={:.4}, vov={:.4}",
-                f, num_repeats, r1, h_score, vov
-            );
-        }
 
         // Reject negative correlation for repeats > 2.
         // We allow it for 2-splits because they are handled by specific penalties later,
@@ -186,6 +169,14 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
         }
 
         let vov_factor = 1.0 + vov * 3.0;
+
+        // Penalty for non-exact total dimension (from resizing/padding)
+        // Steeper penalty to prefer exact matches (rem=0) over noise
+        // rem=0 -> 1.0
+        // rem=1 -> 0.83
+        // rem=2 -> 0.71
+        // rem=3 -> 0.62
+        let remainder_penalty = 1.0 / (1.0 + rem as f32 * 0.2);
 
         let mut reliability = 1.0;
 
@@ -260,6 +251,14 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
             // Range 180-220 was penalized before?
             // 260 falls into "else".
 
+            // KILL APPROXIMATE 2-SPLITS
+            // 2-row grids are already risky (often false positives).
+            // Approximate 2-row grids (rem > 0) are almost always false positives (like cardframes_pricetag).
+            // We require exact division for 2-row grids unless the correlation is perfect.
+            if rem > 0 && h_score < 0.95 {
+                reliability = 0.0;
+            }
+
             if total_dim >= 180 && total_dim <= 220 {
                 // Range 180-220 handles blue_cross (200px, 1x1) which should NOT be split.
                 // border_n_2 (200px) is also being 2-split (f=100, reps=2).
@@ -306,10 +305,6 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
             // That should be fine. Why is it failing?
 
             // Let's debug ui_chest_lock.
-            if total_dim == 260 {
-                println!("Debugging 260px Chest Lock");
-            }
-
             if h_score > 0.4 && !(total_dim >= 180 && total_dim <= 220) {
                 penalty = penalty.max(0.9);
             } else if total_dim >= 180 && total_dim <= 220 && h_score > 0.95 {
@@ -354,9 +349,16 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
             1.0
         };
 
-        let score = h_score * vov_factor * reliability * repeat_bonus;
+        let score = h_score * vov_factor * reliability * repeat_bonus * remainder_penalty;
 
-        scored.push((f, score));
+        if total_dim == 351 {
+            // Chest Notif Height
+            println!(
+                "  ChestNotif Checking f={} (rem={}): r1={:.4}, h_score={:.4}, vov={:.4}, score={:.4}",
+                f, rem, r1, h_score, vov, score
+            );
+        }
+        scored.push((f, score, rem));
     }
 
     if scored.is_empty() {
@@ -370,13 +372,22 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
     }
 
     let mut best_f = scored[0].0;
+    // Track the remainder of the current best factor to ensure we don't downgrade to a worse-fitting grid
+    let mut best_rem = scored[0].2;
 
     // Tie-breaker: Prefer larger periods (simpler grids) if they are close enough to top score
     // This protects against over-fragmenting single assets
-    for (f, s) in &scored {
-        if *s >= max_s * 0.9 {
+    for (f, s, r) in &scored {
+        // Strict threshold (0.96) to prevent merging valid frames unless very confident
+        if *s >= max_s * 0.96 {
+            // Don't switch to a larger period if it has a worse remainder (worse fit)
+            // e.g. Don't prefer f=1959 (rem=2) over f=392 (rem=0)
+            if *r > best_rem {
+                continue;
+            }
             if *f > best_f {
                 best_f = *f;
+                best_rem = *r;
             }
         } else {
             break;
@@ -387,27 +398,38 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
     let mut current_best_vov = calculate_vov(signal, best_f as usize);
 
     // Check for REDUCTION (smaller divisor)
-    for &(f, _s) in &scored {
-        if f < best_f && best_f % f == 0 {
-            let cand_vov = calculate_vov(signal, f as usize);
-            // Lowered threshold to 0.6 to allow 7x6 ghoul_ripper (vov 159 vs 247)
-            if cand_vov > current_best_vov * 0.6 {
-                let cand_score = scored
-                    .iter()
-                    .find(|&&(k, _)| k == f)
-                    .map(|&(_, s)| s)
-                    .unwrap_or(0.0);
-                // Lowered to 0.4
-                if cand_score > max_s * 0.4 {
-                    best_f = f;
-                    current_best_vov = cand_vov;
+    for &(f, _s, _r) in &scored {
+        if f < best_f {
+            let ratio = best_f as f32 / f as f32;
+            let nearest_mult = ratio.round();
+
+            // Ensure we are reducing to a harmonic (at least 2x repeats), not just a slightly offset period
+            if nearest_mult < 2.0 {
+                continue;
+            }
+
+            // Allow approximate reduction if within 1% error (handles resized assets harmonics)
+            if (ratio - nearest_mult).abs() < 0.01 {
+                let cand_vov = calculate_vov(signal, f as usize);
+                // Lowered threshold to 0.6 to allow 7x6 ghoul_ripper (vov 159 vs 247)
+                if cand_vov > current_best_vov * 0.6 {
+                    let cand_score = scored
+                        .iter()
+                        .find(|&&(k, _, _)| k == f)
+                        .map(|&(_, s, _)| s)
+                        .unwrap_or(0.0);
+                    // Lowered to 0.4
+                    if cand_score > max_s * 0.4 {
+                        best_f = f;
+                        current_best_vov = cand_vov;
+                    }
                 }
             }
         }
     }
 
     // Check for PROMOTION (larger multiple)
-    for &(f, _s) in &scored {
+    for &(f, _s, _r) in &scored {
         if f > best_f && f % best_f == 0 {
             let mult = f / best_f;
             if mult > 8 {
@@ -428,8 +450,8 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
             if cand_vov > current_best_vov * threshold {
                 let cand_score = scored
                     .iter()
-                    .find(|&&(k, _)| k == f)
-                    .map(|&(_, s)| s)
+                    .find(|&&(k, _, _)| k == f)
+                    .map(|&(_, s, _)| s)
                     .unwrap_or(0.0);
                 if cand_score > max_s * 0.2 {
                     best_f = f;
@@ -442,14 +464,25 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
     best_f
 }
 
-fn get_factors_to_check(n: u32) -> Vec<u32> {
-    let mut factors = get_divisors(n);
-    if n > 10 {
-        let mut factors_minus_1 = get_divisors(n - 1);
-        factors.append(&mut factors_minus_1);
+fn get_factors_to_check(n: u32) -> Vec<(u32, u32)> {
+    let mut factors = Vec::new();
+    // Check divisors for n, n-1, ... n-16 to handle resizing artifacts and non-integer grid sizes
+    let range = if n > 16 { 16 } else { 0 };
+
+    for i in 0..=range {
+        let f_list = get_divisors(n - i);
+        for f in f_list {
+            factors.push((f, i));
+        }
     }
-    factors.sort_unstable();
-    factors.dedup();
+
+    // Sort by factor, then by remainder (ascending)
+    factors.sort_unstable_by(|a, b| match a.0.cmp(&b.0) {
+        std::cmp::Ordering::Equal => a.1.cmp(&b.1),
+        other => other,
+    });
+    // Dedup by factor, keeping the one with smallest remainder
+    factors.dedup_by(|a, b| a.0 == b.0);
     factors
 }
 
