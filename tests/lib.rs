@@ -945,6 +945,34 @@ fn test_resized_totem_tower_troop_blue_eat_n() {
 }
 
 #[test]
+fn test_zap_card_projectile() {
+    test_asset(
+        "assets/zap_card_projectile.png",
+        SpritesheetInfo {
+            sprite_width: 1508,
+            sprite_height: 106,
+            columns: 2,
+            rows: 12,
+            frame_count: 24,
+        },
+    );
+}
+
+#[test]
+fn test_zap_card_hit() {
+    test_asset(
+        "assets/zap_card_hit.png",
+        SpritesheetInfo {
+            sprite_width: 103,
+            sprite_height: 100,
+            columns: 4,
+            rows: 4,
+            frame_count: 13,
+        },
+    );
+}
+
+#[test]
 fn test_resized_priest_troop_blue_heal_unit_n() {
     test_asset(
         "assets/resized_test/priest_troop_blue_heal_unit_n.png",
