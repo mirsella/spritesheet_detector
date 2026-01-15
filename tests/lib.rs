@@ -620,23 +620,6 @@ fn test_hero_builder_troop_blue_attack() {
 }
 
 #[test]
-#[ignore]
-fn test_punk_band_guitarrist_troop_blue_death() {
-    assert_eq!(
-        analyze_spritesheet(
-            &image::open("assets/punk_band_guitarrist_troop_blue_death.png").unwrap(),
-        ),
-        SpritesheetInfo {
-            sprite_width: 340,
-            sprite_height: 304,
-            columns: 4,
-            rows: 5,
-            frame_count: 20
-        }
-    );
-}
-
-#[test]
 fn test_ui_chest_lock() {
     assert_eq!(
         analyze_spritesheet(&image::open("assets/UI_chest_lock.png").unwrap()),
@@ -674,6 +657,134 @@ fn test_blue_cross() {
             columns: 1,
             rows: 1,
             frame_count: 1
+        }
+    );
+}
+
+#[test]
+fn test_regression_archer_troop_projectile_impact() {
+    assert_eq!(
+        analyze_spritesheet(&image::open("assets/archer_troop_projectile_impact.png").unwrap()),
+        SpritesheetInfo {
+            sprite_width: 90,
+            sprite_height: 89,
+            columns: 2,
+            rows: 2,
+            frame_count: 4,
+        }
+    );
+}
+
+#[test]
+fn test_regression_punk_band_guitarrist_troop_blue_death() {
+    assert_eq!(
+        analyze_spritesheet(
+            &image::open("assets/punk_band_guitarrist_troop_blue_death.png").unwrap()
+        ),
+        SpritesheetInfo {
+            sprite_width: 340,
+            sprite_height: 380,
+            columns: 4,
+            rows: 4,
+            frame_count: 16,
+        }
+    );
+}
+
+#[test]
+fn test_regression_monk_tower_troop_rock_attack() {
+    assert_eq!(
+        analyze_spritesheet(&image::open("assets/monk_tower_troop_rock_attack.png").unwrap()),
+        SpritesheetInfo {
+            sprite_width: 238,
+            sprite_height: 706,
+            columns: 6,
+            rows: 6,
+            frame_count: 35,
+        }
+    );
+}
+
+#[test]
+fn test_regression_totem_tower_troop_blue_eat_n() {
+    assert_eq!(
+        analyze_spritesheet(&image::open("assets/totem_tower_troop_blue_eat_n.png").unwrap()),
+        SpritesheetInfo {
+            sprite_width: 296,
+            sprite_height: 604,
+            columns: 9,
+            rows: 8,
+            frame_count: 70,
+        }
+    );
+}
+
+#[test]
+fn test_regression_priest_troop_blue_heal_unit_n() {
+    assert_eq!(
+        analyze_spritesheet(&image::open("assets/priest_troop_blue_heal_unit_n.png").unwrap()),
+        SpritesheetInfo {
+            sprite_width: 320,
+            sprite_height: 456,
+            columns: 9,
+            rows: 9,
+            frame_count: 78,
+        }
+    );
+}
+
+#[test]
+fn test_regression_peasant_card_overlay() {
+    assert_eq!(
+        analyze_spritesheet(&image::open("assets/peasant_card_overlay.png").unwrap()),
+        SpritesheetInfo {
+            sprite_width: 383,
+            sprite_height: 392,
+            columns: 11,
+            rows: 10,
+            frame_count: 100,
+        }
+    );
+}
+
+#[test]
+fn test_regression_chest_common_1_call() {
+    assert_eq!(
+        analyze_spritesheet(&image::open("assets/chest_common_1_call.png").unwrap()),
+        SpritesheetInfo {
+            sprite_width: 942,
+            sprite_height: 809,
+            columns: 5,
+            rows: 5,
+            frame_count: 25,
+        }
+    );
+}
+
+#[test]
+fn test_regression_chest_common_1_lvlup() {
+    assert_eq!(
+        analyze_spritesheet(&image::open("assets/chest_common_1_lvlup.png").unwrap()),
+        SpritesheetInfo {
+            sprite_width: 942,
+            sprite_height: 809,
+            columns: 6,
+            rows: 6,
+            frame_count: 31,
+        }
+    );
+}
+
+#[test]
+fn test_regression_chest_common_1_open_idle() {
+    assert_eq!(
+        analyze_spritesheet(&image::open("assets/chest_common_1_open_idle.png").unwrap()),
+        SpritesheetInfo {
+            sprite_width: 942,
+            sprite_height: 809,
+            columns: 8,
+            rows: 8,
+            frame_count: 60,
         }
     );
 }

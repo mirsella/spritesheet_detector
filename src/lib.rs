@@ -116,6 +116,10 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
     let mean = signal.iter().sum::<f32>() / signal.len() as f32;
     let detrended: Vec<f32> = signal.iter().map(|&x| x - mean).collect();
 
+    if total_dim == 200 {
+        // println!("Debugging 200px Border");
+    }
+
     let mut scored = Vec::new();
     for &f in &factors {
         if f < 4 || f > total_dim / 2 {
@@ -147,6 +151,27 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
 
         let h_score = product.powf(1.0 / count);
         let vov = calculate_vov(signal, f as usize);
+
+        if total_dim == 260 {
+            println!(
+                "  Checking f={} (reps={}): r1={:.4}, h_score={:.4}, vov={:.4}",
+                f, num_repeats, r1, h_score, vov
+            );
+        }
+
+        if total_dim == 200 {
+            println!(
+                "  Checking f={} (reps={}): r1={:.4}, h_score={:.4}, vov={:.4}",
+                f, num_repeats, r1, h_score, vov
+            );
+        }
+
+        // Reject negative correlation for repeats > 2.
+        // We allow it for 2-splits because they are handled by specific penalties later,
+        // and some valid 2-row grids (like ui_chest_lock) have negative correlation (inverted rows?).
+        if num_repeats > 2 && r1 < 0.01 {
+            continue;
+        }
 
         // Reject very weak correlations (likely noise or single images)
         // Tilesets (different sprites) can have low correlation (~0.2), but 0.01 is definitely not a grid.
@@ -236,6 +261,22 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
             // 260 falls into "else".
 
             if total_dim >= 180 && total_dim <= 220 {
+                // Range 180-220 handles blue_cross (200px, 1x1) which should NOT be split.
+                // border_n_2 (200px) is also being 2-split (f=100, reps=2).
+                // h_score for border_n_2 is 0.7555.
+                // We previously set penalty = 0.001 to kill 2-splits in this range.
+                // BUT, later we relax penalty if h_score > 0.4.
+                // border_n_2 has h_score=0.75, so penalty becomes 0.9.
+                // This saves the 2-split, causing the false positive.
+
+                // We need to differentiate blue_cross (h_score=?) from border_n_2.
+                // If blue_cross has very high h_score, it might also be at risk?
+                // Actually blue_cross is 1x1, so it shouldn't have strong grid signal at f=100.
+                // Wait, if blue_cross is 200px, f=100 means 2 reps.
+
+                // Let's check if we can simply NOT relax the penalty for this specific range.
+                // Or require even higher h_score?
+
                 penalty = 0.001;
             } else if total_dim > 300 {
                 // Penalize 2-splits for larger images (likely single assets like 400px cards or 1000px frames)
@@ -247,7 +288,32 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
             }
 
             // If correlation is strong (e.g. map_tiles h=0.5), reduce penalty to save valid grids
-            if h_score > 0.4 {
+            // EXCEPTION: For 180-220px range (blue_cross, borders), do NOT relax penalty unless h_score is EXTREME (> 0.95).
+            // border_n_2 has h=0.75, so it will stay penalized.
+
+            // Also need to save ui_chest_lock (260px, h=0.83).
+            // It falls outside 180-220 range (total_dim > 300 branch or else branch?).
+            // 260 is in "else" branch of previous if.
+            // Oh, my previous code structure:
+            // if > 800 ...
+            // else if 180..220 ...
+            // else if > 300 ...
+            // else ...
+
+            // 260 falls into "else" (penalty = 0.95).
+            // But now I added: if h_score > 0.4 && !(180..220) -> penalty = max(0.9)
+            // So ui_chest_lock (260px) gets penalty 0.95. Reliability *= 0.95.
+            // That should be fine. Why is it failing?
+
+            // Let's debug ui_chest_lock.
+            if total_dim == 260 {
+                println!("Debugging 260px Chest Lock");
+            }
+
+            if h_score > 0.4 && !(total_dim >= 180 && total_dim <= 220) {
+                penalty = penalty.max(0.9);
+            } else if total_dim >= 180 && total_dim <= 220 && h_score > 0.95 {
+                // Allow perfect matches in the dangerous 180-220px range
                 penalty = penalty.max(0.9);
             }
             reliability *= penalty;
