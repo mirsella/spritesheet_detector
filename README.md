@@ -6,7 +6,8 @@
 
 - **Automated Grid Detection**: Automatically determines frame dimensions, columns, and rows.
 - **Smart Frame Counting**: Identifies the exact number of active frames, ignoring empty trailing cells.
-- **Resizing Robustness**: Handles images resized to non-integer grid multiples (e.g., assets scaled to fit 4096px limits).
+- **Resizing Robustness**: Handles images resized to non-integer grid multiples (e.g., assets scaled to fit 4096px limits) using approximate harmonic reduction.
+- **Improved Small-Period Detection**: Robustly differentiates between repeating textures/borders and valid small-period spritesheets (like projectiles) using Variance of Variance (VoV) analysis.
 - **High Resolution Support**: Optimized for 4K+ spritesheets using parallel processing with `rayon`.
 - **Projection Analysis**: Combines Alpha and Gradient signals to detect grids even in dense tilesets or sparse animations.
 
