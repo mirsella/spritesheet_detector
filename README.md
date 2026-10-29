@@ -24,7 +24,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-spritesheet_detector = "0.3"
+spritesheet_detector = "0.4"
 ```
 
 ### Basic Example
