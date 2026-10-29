@@ -7,6 +7,7 @@ description = "A library to analyze spritesheets and detect sprite dimensions an
 repository = "https://github.com/mirsella/spritesheet_detector"
 keywords = ["gamedev", "bevy", "spritesheet", "animation"]
 license = "MIT"
+exclude = ["assets/**", "tests/**"]
 
 [dependencies]
 image = "0.25"
