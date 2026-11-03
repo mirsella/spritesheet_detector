@@ -1,4 +1,4 @@
-use image::{DynamicImage, GenericImageView, RgbaImage};
+use image::{DynamicImage, RgbaImage};
 use rayon::prelude::*;
 
 /// Information about the detected spritesheet structure.
@@ -20,14 +20,27 @@ pub struct SpritesheetInfo {
 /// Analyze a spritesheet image and return its grid information.
 #[must_use]
 pub fn analyze_spritesheet(img: &DynamicImage) -> SpritesheetInfo {
-    let (width, height) = img.dimensions();
+    let rgba = img.to_rgba8();
+    let (width, height) = rgba.dimensions();
+    let (v_alpha, h_alpha, v_grad, h_grad) = extract_signals(&rgba);
+    let widths = score_periods(&v_alpha, &v_grad, width);
+    let heights = score_periods(&h_alpha, &h_grad, height);
+    let initial_width = select_period(&widths, width, false);
+    let initial_height = select_period(&heights, height, false);
 
-    // 1. Feature Extraction: Projection Profiles (Alpha + Gradient)
-    let (v_alpha, h_alpha, v_grad, h_grad) = extract_signals(img);
-
-    // 2. Periodicity Detection on Divisors
-    let sprite_width = detect_period(&v_alpha, &v_grad, width);
-    let sprite_height = detect_period(&h_alpha, &h_grad, height);
+    // Two dissimilar rows or columns can still be animation frames when the
+    // perpendicular axis independently establishes a grid. Without that
+    // evidence, anticorrelated halves of an outline are an ambiguous split.
+    let sprite_width = if initial_height < height {
+        select_period(&widths, width, true)
+    } else {
+        initial_width
+    };
+    let sprite_height = if initial_width < width {
+        select_period(&heights, height, true)
+    } else {
+        initial_height
+    };
 
     let columns = if sprite_width > 0 {
         width / sprite_width
@@ -40,9 +53,8 @@ pub fn analyze_spritesheet(img: &DynamicImage) -> SpritesheetInfo {
         1
     };
 
-    // 3. Content Validation: Frame Counting
     let frame_count = if sprite_width > 0 && sprite_height > 0 {
-        find_last_active_frame(img, sprite_width, sprite_height, columns, rows)
+        find_last_active_frame(&rgba, sprite_width, sprite_height, columns, rows)
     } else {
         0
     };
@@ -56,16 +68,20 @@ pub fn analyze_spritesheet(img: &DynamicImage) -> SpritesheetInfo {
     }
 }
 
-fn extract_signals(img: &DynamicImage) -> (Vec<f32>, Vec<f32>, Vec<f32>, Vec<f32>) {
-    let (w, h) = img.dimensions();
-    let rgba = img.to_rgba8();
+fn extract_signals(rgba: &RgbaImage) -> (Vec<f32>, Vec<f32>, Vec<f32>, Vec<f32>) {
+    let (w, h) = rgba.dimensions();
 
+    // Premultiplied luminance keeps invisible RGB out of the gradient signal.
     let gray: Vec<u8> = rgba
         .pixels()
-        .map(|p| ((p[0] as u32 * 299 + p[1] as u32 * 587 + p[2] as u32 * 114) / 1000) as u8)
+        .map(|p| {
+            ((u32::from(p[0]) * 299 + u32::from(p[1]) * 587 + u32::from(p[2]) * 114)
+                * u32::from(p[3])
+                / (1000 * 255)) as u8
+        })
         .collect();
 
-    let v_data: Vec<(f32, f32)> = (0..w)
+    let (v_alpha, v_grad) = (0..w)
         .into_par_iter()
         .map(|x| {
             let mut a_sum = 0.0;
@@ -81,9 +97,9 @@ fn extract_signals(img: &DynamicImage) -> (Vec<f32>, Vec<f32>, Vec<f32>, Vec<f32
             }
             (a_sum / 255.0, g_sum / 255.0)
         })
-        .collect();
+        .unzip();
 
-    let h_data: Vec<(f32, f32)> = (0..h)
+    let (h_alpha, h_grad) = (0..h)
         .into_par_iter()
         .map(|y| {
             let mut a_sum = 0.0;
@@ -99,17 +115,24 @@ fn extract_signals(img: &DynamicImage) -> (Vec<f32>, Vec<f32>, Vec<f32>, Vec<f32
             }
             (a_sum / 255.0, g_sum / 255.0)
         })
-        .collect();
+        .unzip();
 
-    let (v_alpha, v_grad) = v_data.into_iter().unzip();
-    let (h_alpha, h_grad) = h_data.into_iter().unzip();
     (v_alpha, h_alpha, v_grad, h_grad)
 }
 
-fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
-    let factors = get_factors_to_check(total_dim);
+struct PeriodCandidate {
+    period: u32,
+    remainder: u32,
+    score: f32,
+    variance: f32,
+    requires_perpendicular_grid: bool,
+}
+
+fn score_periods(alpha: &[f32], grad: &[f32], total_dim: u32) -> Vec<PeriodCandidate> {
     let a_mean = alpha.iter().sum::<f32>() / alpha.len() as f32;
     let a_var = alpha.iter().map(|&x| (x - a_mean).powi(2)).sum::<f32>() / alpha.len() as f32;
+    let max_a = alpha.iter().copied().fold(0.0, f32::max);
+    let mean_g = grad.iter().sum::<f32>() / grad.len() as f32;
 
     // Choose signal based on variance: Alpha for sprites, Gradient for maps.
     let signal = if a_var > 1e-5 { alpha } else { grad };
@@ -117,7 +140,7 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
     let detrended: Vec<f32> = signal.iter().map(|&x| x - mean).collect();
 
     let mut scored = Vec::new();
-    for &(f, rem) in &factors {
+    for (f, rem) in get_factors_to_check(total_dim) {
         if f < 4 || f > total_dim / 2 {
             continue;
         }
@@ -126,13 +149,12 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
         }
 
         let r1 = normalized_correlation(&detrended, f as usize);
-        let r2 = normalized_correlation(&detrended, (f * 2) as usize);
-        let r3 = normalized_correlation(&detrended, (f * 3) as usize);
-
         let num_repeats = total_dim / f;
-        if num_repeats < 2 && r1 < 0.25 {
+        if r1 < 0.01 && num_repeats > 2 {
             continue;
         }
+        let r2 = normalized_correlation(&detrended, (f * 2) as usize);
+        let r3 = normalized_correlation(&detrended, (f * 3) as usize);
 
         let mut product = r1.max(0.01);
         let mut count = 1.0;
@@ -149,17 +171,7 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
         let h_score = product.powf(1.0 / count);
         let vov = calculate_vov(signal, f as usize);
 
-        // Reject negative correlation for repeats > 2.
-        if num_repeats > 2 && r1 < 0.01 {
-            continue;
-        }
-
-        // Reject very weak correlations (likely noise or single images)
-        if h_score < 0.005 {
-            continue;
-        }
-
-        // However, allow low h_score (but > 0.005) if VoV is extremely strong
+        // Weak correlations need strong folded variance to remain plausible.
         if h_score < 0.1 && vov < 10.0 {
             continue;
         }
@@ -177,10 +189,18 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
         }
 
         // Generic Cut Line Analysis: Check if grid lines cut through solid objects
-        let max_a = alpha.iter().cloned().fold(0.0, f32::max);
-        let mean_g = grad.iter().sum::<f32>() / grad.len() as f32;
         let mut bad_cuts = 0;
         let checks = (num_repeats - 1).min(10);
+
+        // Approximate periods need clearer gaps: an internal edge can
+        // otherwise turn a padded outline into a plausible resized grid.
+        let strict_cuts = h_score < 0.6 || rem > 0;
+        let alpha_thresh_ratio = if strict_cuts && (rem > 0 || r1 < 0.4) {
+            0.1
+        } else {
+            0.25
+        };
+        let grad_thresh_ratio = if strict_cuts { 3.0 } else { 1.0 };
 
         for k in 1..=checks {
             let cut_idx = (f * k) as usize;
@@ -191,11 +211,12 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
             let local_a = alpha[cut_idx];
             let local_g = grad[cut_idx];
 
-            let strict_cuts = h_score < 0.6;
-            let alpha_thresh_ratio = if strict_cuts { 0.1 } else { 0.25 };
-            let grad_thresh_ratio = if strict_cuts { 3.0 } else { 1.0 };
-
-            let is_edge = local_g > 0.5 && local_g > mean_g * grad_thresh_ratio;
+            // With varying alpha, a color edge alone does not establish a
+            // frame boundary for a weak or approximate candidate. Uniform-
+            // alpha sheets still need gradients because they have no gaps.
+            let is_edge = (!strict_cuts || a_var <= 1e-5)
+                && local_g > 0.5
+                && local_g > mean_g * grad_thresh_ratio;
             if local_a > max_a * alpha_thresh_ratio && !is_edge {
                 bad_cuts += 1;
             }
@@ -258,111 +279,96 @@ fn detect_period(alpha: &[f32], grad: &[f32], total_dim: u32) -> u32 {
 
         // Bonus for "Sweet Spot" repeat counts (3 to 8)
         let repeat_bonus = if num_repeats >= 3 && num_repeats <= 8 {
-            if h_score < 0.25 {
-                if r1 < 0.01 {
-                    reliability *= 0.001;
-                    1.0
-                } else if (f < 64 && vov < 10.0) || vov < 5.0 {
-                    reliability *= 0.1;
-                    1.0
-                } else {
-                    if vov > 0.5 { 1.1 } else { 1.0 }
-                }
+            // Evolving frames may correlate with their neighbor but not with
+            // distant frames. Do not classify that as weak adjacent repetition.
+            if r1 < 0.25 && ((f < 64 && vov < 10.0) || vov < 5.0) {
+                reliability *= 0.1;
+                1.0
+            } else if vov > 0.5 {
+                1.2
             } else {
-                if vov > 0.5 { 1.1 } else { 1.0 }
+                1.0
             }
         } else {
             1.0
         };
 
         let score = h_score * vov_factor * reliability * repeat_bonus * remainder_penalty;
-        scored.push((f, score, rem));
+        scored.push(PeriodCandidate {
+            period: f,
+            remainder: rem,
+            score,
+            variance: vov,
+            requires_perpendicular_grid: r1 < 0.01,
+        });
     }
+    scored.sort_by(|a, b| b.score.total_cmp(&a.score));
+    scored
+}
 
-    if scored.is_empty() {
+fn select_period(scored: &[PeriodCandidate], total_dim: u32, has_perpendicular_grid: bool) -> u32 {
+    let candidates = scored
+        .iter()
+        .filter(|candidate| has_perpendicular_grid || !candidate.requires_perpendicular_grid);
+    let Some(strongest) = candidates.clone().next() else {
         return total_dim;
-    }
-    scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-
-    let max_s = scored[0].1;
+    };
+    let max_s = strongest.score;
     if max_s < 0.8 {
         return total_dim;
     }
 
-    let mut best_f = scored[0].0;
-    let mut best_rem = scored[0].2;
+    let mut best = strongest;
 
-    for (f, s, r) in &scored {
-        if *s >= max_s * 0.96 {
-            if *r > best_rem {
+    for candidate in candidates.clone() {
+        if candidate.score >= max_s * 0.96 {
+            if candidate.remainder > best.remainder {
                 continue;
             }
-            if *f > best_f {
-                best_f = *f;
-                best_rem = *r;
+            if candidate.period > best.period {
+                best = candidate;
             }
         } else {
             break;
         }
     }
 
-    // Sub-harmonic correction
-    let mut current_best_vov = calculate_vov(signal, best_f as usize);
-
     // Check for REDUCTION (smaller divisor)
-    for &(f, _s, _r) in &scored {
-        if f < best_f {
-            let ratio = best_f as f32 / f as f32;
+    for candidate in candidates.clone() {
+        if candidate.period < best.period {
+            let ratio = best.period as f32 / candidate.period as f32;
             let nearest_mult = ratio.round();
 
             if nearest_mult < 2.0 {
                 continue;
             }
 
-            if (ratio - nearest_mult).abs() < 0.01 {
-                let cand_vov = calculate_vov(signal, f as usize);
-                if cand_vov > current_best_vov * 0.6 {
-                    let cand_score = scored
-                        .iter()
-                        .find(|&&(k, _, _)| k == f)
-                        .map(|&(_, s, _)| s)
-                        .unwrap_or(0.0);
-                    if cand_score > max_s * 0.4 {
-                        best_f = f;
-                        current_best_vov = cand_vov;
-                    }
-                }
+            if (ratio - nearest_mult).abs() < 0.01
+                && candidate.variance > best.variance * 0.6
+                && candidate.score > max_s * 0.4
+            {
+                best = candidate;
             }
         }
     }
 
     // Check for PROMOTION (larger multiple)
-    for &(f, _s, _r) in &scored {
-        if f > best_f && f % best_f == 0 {
-            let mult = f / best_f;
+    for candidate in candidates {
+        if candidate.period > best.period && candidate.period % best.period == 0 {
+            let mult = candidate.period / best.period;
             if mult > 8 {
                 continue;
             }
-            let cand_vov = calculate_vov(signal, f as usize);
-
-            let target_repeats = total_dim / f;
+            let target_repeats = total_dim / candidate.period;
             let threshold = if target_repeats == 2 { 3.0 } else { 1.2 };
 
-            if cand_vov > current_best_vov * threshold {
-                let cand_score = scored
-                    .iter()
-                    .find(|&&(k, _, _)| k == f)
-                    .map(|&(_, s, _)| s)
-                    .unwrap_or(0.0);
-                if cand_score > max_s * 0.2 {
-                    best_f = f;
-                    current_best_vov = cand_vov;
-                }
+            if candidate.variance > best.variance * threshold && candidate.score > max_s * 0.2 {
+                best = candidate;
             }
         }
     }
 
-    best_f
+    best.period
 }
 
 fn get_factors_to_check(n: u32) -> Vec<(u32, u32)> {
@@ -438,8 +444,7 @@ pub(crate) fn get_divisors(n: u32) -> Vec<u32> {
     res
 }
 
-fn find_last_active_frame(img: &DynamicImage, sw: u32, sh: u32, cols: u32, rows: u32) -> u32 {
-    let rgba = img.to_rgba8();
+fn find_last_active_frame(rgba: &RgbaImage, sw: u32, sh: u32, cols: u32, rows: u32) -> u32 {
     let total_frames = rows * cols;
     let mut last_active = 0;
 
@@ -449,7 +454,7 @@ fn find_last_active_frame(img: &DynamicImage, sw: u32, sh: u32, cols: u32, rows:
         let x = c * sw;
         let y = r * sh;
 
-        if is_frame_active(&rgba, x, y, sw, sh) {
+        if is_frame_active(rgba, x, y, sw, sh) {
             last_active = i + 1;
         }
     }
@@ -483,6 +488,34 @@ fn is_frame_active(img: &RgbaImage, x: u32, y: u32, sw: u32, sh: u32) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ambiguous_candidates_do_not_change_the_independent_grid_score() {
+        // An ambiguous candidate must neither change the independent maximum
+        // nor reenter the result through harmonic promotion.
+        for (score, variance) in [(100.0, 2.0), (9.0, 4.0)] {
+            let mut candidates = [
+                PeriodCandidate {
+                    period: 64,
+                    remainder: 0,
+                    score,
+                    variance,
+                    requires_perpendicular_grid: true,
+                },
+                PeriodCandidate {
+                    period: 32,
+                    remainder: 0,
+                    score: 10.0,
+                    variance: 1.0,
+                    requires_perpendicular_grid: false,
+                },
+            ];
+            candidates.sort_by(|a, b| b.score.total_cmp(&a.score));
+            assert_eq!(select_period(&candidates, 128, false), 32);
+            assert_eq!(select_period(&candidates, 128, true), 64);
+        }
+    }
+
     #[test]
     fn test_divisors() {
         assert_eq!(get_divisors(12), vec![1, 2, 3, 4, 6, 12]);

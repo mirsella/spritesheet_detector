@@ -7,7 +7,7 @@
 - **Automated Grid Detection**: Automatically determines frame dimensions, columns, and rows.
 - **Smart Frame Counting**: Identifies the exact number of active frames, ignoring empty trailing cells.
 - **Resizing Robustness**: Handles images resized to non-integer grid multiples (e.g., assets scaled to fit 4096px limits) using approximate harmonic reduction.
-- **Improved Small-Period Detection**: Robustly differentiates between repeating textures/borders and valid small-period spritesheets (like projectiles) using Variance of Variance (VoV) analysis.
+- **Small-period detection**: Scores short repeats using autocorrelation and folded projection variance.
 - **High Resolution Support**: Optimized for 4K+ spritesheets using parallel processing with `rayon`.
 - **Projection Analysis**: Combines Alpha and Gradient signals to detect grids even in dense tilesets or sparse animations.
 
@@ -24,7 +24,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-spritesheet_detector = "0.4"
+spritesheet_detector = "0.4.1"
 ```
 
 ### Basic Example
@@ -63,3 +63,13 @@ The library includes an extensive test suite covering original high-resolution a
 ```bash
 cargo test
 ```
+
+## Single images and ambiguity
+
+The detector uses pixels only. It does not inspect filenames or know whether an image is intended for animation. Gradients use alpha-weighted luminance, so RGB values in fully transparent pixels cannot create a grid.
+
+Approximate periods require clearer cut lines than exact periods. A two-cell candidate with negative adjacent correlation needs an independently detected grid on the perpendicular axis. This avoids splitting some outlines in half while preserving sheets with dissimilar rows or columns.
+
+Repeated decorations can be indistinguishable from repeated animation frames. Dashed territory edges are one example. A two-frame strip with dissimilar silhouettes can also lack enough evidence to detect. Keep explicit layout metadata for these cases; a single-image result is not proof that an asset is static.
+
+`tests/classification.rs` covers source-image regressions, sparse animation frames, repeated UI animation, and changes to invisible RGB. Fixture origins are listed in `assets/classification/README.md`.
